@@ -1,0 +1,19 @@
+@* Status as an icon plus a word, never colour alone. *@
+<span class="badge badge-@ToneName @Class" @attributes="AdditionalAttributes">
+    <Icon Name="@IconName" Size="13" />
+    <span>@Text</span>
+</span>
+
+@code {
+    public enum BadgeTone { Ok, Warn, Danger, Info }
+
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+    [Parameter] public BadgeTone Tone { get; set; } = BadgeTone.Info;
+    /// <summary>Override the icon; defaults to one that matches the tone.</summary>
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string ToneName => Tone.ToString().ToLowerInvariant();
+    private string IconName => Icon ?? Tone switch { BadgeTone.Ok => "check", BadgeTone.Warn => "alert", BadgeTone.Danger => "octagon", _ => "info" };
+}

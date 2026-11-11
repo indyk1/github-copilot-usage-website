@@ -1,0 +1,35 @@
+@* A bar measuring Value against a Target. The track runs to ScaleMax x Target, with a tick at the target itself,
+   so going past the target is visible: the fill changes to a hatched warm gradient beyond the tick. *@
+<div class="pbar @(IsOver ? "over" : null)" role="progressbar" aria-label="@Label" aria-valuemin="0"
+     aria-valuemax="@MaxText" aria-valuenow="@NowText" aria-valuetext="@AriaText">
+    <div class="track">
+        <div class="fill" style="width: @FillPercent%"></div>
+        @if (Target > 0m && ScaleMax > 1m)
+        {
+            <div class="tick" style="left: @TickPercent%" title="@TargetLabel"></div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public decimal Value { get; set; }
+    [Parameter] public decimal Target { get; set; }
+    /// <summary>The track covers 0 to ScaleMax x Target (2 means the bar is full at 200% of target).</summary>
+    [Parameter] public decimal ScaleMax { get; set; } = 2m;
+    /// <summary>What the bar measures, for assistive technology ("Credits against fair share").</summary>
+    [Parameter] public string Label { get; set; } = "Progress";
+    /// <summary>Name of the target, shown as the tick's tooltip ("Fair share: 1,900 credits").</summary>
+    [Parameter] public string? TargetLabel { get; set; }
+
+    public bool IsOver => Target > 0m && Value > Target;
+
+    private decimal Scale => Math.Max(1m, ScaleMax);
+    private decimal Ratio => Target <= 0m ? 0m : Math.Max(0m, Value) / Target;
+    private string FillPercent => Pct(Math.Min(Ratio / Scale, 1m) * 100m);
+    private string TickPercent => Pct(100m / Scale);
+    private string MaxText => Pct(Scale * 100m);
+    private string NowText => Pct(Math.Min(Ratio, Scale) * 100m);
+    private string AriaText => Target <= 0m ? "No target" : $"{Fmt.Percent(Ratio * 100m)} of target{(IsOver ? ", over the target" : "")}";
+
+    private static string Pct(decimal v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+}

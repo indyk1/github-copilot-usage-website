@@ -1,0 +1,61 @@
+@using CopilotUsage.Data.Queries
+@* Users ranked by credits this month. Each row links to the user's page. The bar measures credits against the fair share
+   (a benchmark set by this dashboard, not a GitHub limit) and changes look, with a text label, once past it. *@
+@if (Rows.Count == 0)
+{
+    <p class="empty">No active seats yet.</p>
+}
+else
+{
+    <ol class="board" id="leaderboard-list">
+        @foreach (var r in Visible)
+        {
+            var over = r.OverFairShare;
+            <li>
+                <a class="row @(over ? "over" : null) @(r.Credits <= 0m ? "idle" : null)" href="/users/@Uri.EscapeDataString(r.Login)">
+                    <span class="rank num" aria-label="Rank @r.Rank">@r.Rank</span>
+                    <span class="who"><Avatar Login="@r.Login" Url="@r.AvatarUrl" Size="34" /><span class="login">@r.Login</span></span>
+                    <span class="credits num"><strong>@Fmt.Credits(r.Credits)</strong><span class="unit"> credits</span></span>
+                    <span class="share num" title="Share of the whole pool">@Fmt.Percent(r.ShareOfPoolPercent, 1)<span class="unit"> of pool</span></span>
+                    <span class="fair">
+                        <ProgressBar Value="@r.Credits" Target="@FairShare" ScaleMax="2" Label="@($"{r.Login}: credits against fair share")"
+                                     TargetLabel="@($"Fair share: {Fmt.Credits(FairShare)} credits")" />
+                        <span class="fair-text num">
+                            @if (over)
+                            {
+                                <span class="over-flag"><Icon Name="arrow-up" Size="12" /> Over fair share</span>
+                                <span> · @Fmt.Percent(r.FairSharePercent)</span>
+                            }
+                            else
+                            {
+                                <span>@Fmt.Percent(r.FairSharePercent) of fair share</span>
+                            }
+                        </span>
+                    </span>
+                    <span class="go" aria-hidden="true"><Icon Name="chevron" Size="16" /></span>
+                </a>
+            </li>
+        }
+    </ol>
+
+    <div class="foot">
+        <p class="note"><Icon Name="info" Size="14" /> <span><strong>Fair share</strong> is @Fmt.Credits(FairShare) credits per user, a benchmark set by this dashboard. It is not a GitHub limit: the pool is shared by the whole organization.</span></p>
+        @if (Rows.Count > Collapsed)
+        {
+            <button type="button" class="btn" aria-expanded="@_expanded.ToString().ToLowerInvariant()" aria-controls="leaderboard-list" @onclick="() => _expanded = !_expanded">
+                @(_expanded ? "Show top " + Collapsed : "Show all " + Rows.Count + " users")
+            </button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<LeaderboardRow> Rows { get; set; } = [];
+    /// <summary>Credits per seat, the benchmark each bar is measured against.</summary>
+    [Parameter] public decimal FairShare { get; set; } = 1900m;
+    /// <summary>Rows shown before "show all".</summary>
+    [Parameter] public int Collapsed { get; set; } = 10;
+
+    private bool _expanded;
+    private IEnumerable<LeaderboardRow> Visible => _expanded ? Rows : Rows.Take(Collapsed);
+}

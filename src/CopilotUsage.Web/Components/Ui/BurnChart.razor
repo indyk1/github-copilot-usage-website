@@ -1,0 +1,188 @@
+@using CopilotUsage.Core.Calculations
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@* Cumulative credits by day against the pool limit and an even-pace line, drawn as SVG in real pixels (so axis text stays
+   12px on a phone). Hover or keyboard focus on a day shows its figures; the tooltip is pure CSS, so it needs no round trip. *@
+<div class="burn" @ref="_host">
+    <ul class="legend" aria-hidden="true">
+        <li><span class="key key-actual"></span> Credits used (cumulative)</li>
+        <li><span class="key key-limit"></span> Pool limit</li>
+        <li><span class="key key-pace"></span> Even pace</li>
+    </ul>
+
+    <svg viewBox="0 0 @N(_w) @N(_h)" role="group" aria-label="@Summary" focusable="false">
+        <defs>
+            <linearGradient id="burn-line" gradientUnits="userSpaceOnUse" x1="@N(_left)" y1="0" x2="@N(_right)" y2="0">
+                <stop offset="0" class="s-violet" /><stop offset="0.55" class="s-blue" /><stop offset="1" class="s-teal" />
+            </linearGradient>
+            <linearGradient id="burn-area" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" class="s-area-top" /><stop offset="1" class="s-area-bottom" />
+            </linearGradient>
+            <clipPath id="burn-over"><rect x="0" y="0" width="@N(_w)" height="@N(Math.Max(0, _limitY))" /></clipPath>
+        </defs>
+
+        @foreach (var t in _ticks)
+        {
+            <line class="grid" x1="@N(_left)" x2="@N(_right)" y1="@N(Y(t))" y2="@N(Y(t))" />
+            <SvgText Class="axis" X="@N(_left - 8)" Y="@N(Y(t) + 4)" Anchor="end">@Fmt.Compact(t)</SvgText>
+        }
+        @foreach (var p in _labelled)
+        {
+            <SvgText Class="axis" X="@N(X(p.DayOfMonth))" Y="@N(_h - 8)" Anchor="middle">@p.DayOfMonth</SvgText>
+        }
+
+        @if (Limit > 0m)
+        {
+            <line class="limit" x1="@N(_left)" x2="@N(_right)" y1="@N(_limitY)" y2="@N(_limitY)" />
+            <SvgText Class="limit-label" X="@N(_left + 8)" Y="@N(_limitY - 7)">Pool limit · @Fmt.Credits(Limit)</SvgText>
+            <path class="pace" d="@_pacePath" />
+        }
+
+        @if (_actualPath.Length > 0)
+        {
+            <path class="area" d="@_areaPath" />
+            <path class="line" d="@_actualPath" pathLength="1" />
+            @if (_overShown)
+            {
+                <path class="line over" d="@_actualPath" pathLength="1" clip-path="url(#burn-over)" />
+            }
+            <circle class="now-dot" cx="@N(X(_lastActual!.DayOfMonth))" cy="@N(Y(_lastActual.Cumulative!.Value))" r="4.5" />
+        }
+
+        @foreach (var p in Points)
+        {
+            var x = X(p.DayOfMonth);
+            var reached = p.Cumulative is not null;
+            var tipW = 176;
+            var tipH = reached ? 92 : 58;
+            var tipX = x + 14 + tipW > _w - 4 ? x - 14 - tipW : x + 14;
+            var tipY = Math.Max(_top, Math.Min(_bottom - tipH, (reached ? Y(p.Cumulative!.Value) : Y(p.EvenPace)) - tipH / 2));
+            <g class="day" tabindex="0" role="img" aria-label="@DayLabel(p)">
+                <rect class="hit" x="@N(x - _step / 2)" y="@N(_top)" width="@N(_step)" height="@N(_bottom - _top)" />
+                <g class="reveal" pointer-events="none">
+                    <line class="guide" x1="@N(x)" x2="@N(x)" y1="@N(_top)" y2="@N(_bottom)" />
+                    @if (reached)
+                    {
+                        <circle class="dot" cx="@N(x)" cy="@N(Y(p.Cumulative!.Value))" r="5" />
+                    }
+                    <circle class="dot pace-dot" cx="@N(x)" cy="@N(Y(p.EvenPace))" r="3.5" />
+                    <g transform="translate(@N(tipX) @N(tipY))">
+                        <rect class="tip-box" width="@tipW" height="@tipH" rx="10" />
+                        <SvgText Class="tip-title" X="12" Y="20">@Fmt.DayMonth(p.Day)</SvgText>
+                        @if (reached)
+                        {
+                            <SvgText Class="tip-k" X="12" Y="40">That day</SvgText><SvgText Class="tip-v" X="@(tipW - 12)" Y="40" Anchor="end">@Fmt.Credits(p.Credits)</SvgText>
+                            <SvgText Class="tip-k" X="12" Y="58">Cumulative</SvgText><SvgText Class="tip-v" X="@(tipW - 12)" Y="58" Anchor="end">@Fmt.Credits(p.Cumulative!.Value)</SvgText>
+                            <SvgText Class="tip-k" X="12" Y="76">Even pace</SvgText><SvgText Class="tip-v" X="@(tipW - 12)" Y="76" Anchor="end">@Fmt.Credits(p.EvenPace)</SvgText>
+                        }
+                        else
+                        {
+                            <SvgText Class="tip-k" X="12" Y="38">Not reached yet</SvgText>
+                            <SvgText Class="tip-k" X="12" Y="52">Even pace</SvgText><SvgText Class="tip-v" X="@(tipW - 12)" Y="52" Anchor="end">@Fmt.Credits(p.EvenPace)</SvgText>
+                        }
+                    </g>
+                </g>
+            </g>
+        }
+    </svg>
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
+    [Parameter, EditorRequired] public IReadOnlyList<BurnPoint> Points { get; set; } = [];
+    [Parameter] public decimal Limit { get; set; }
+
+    private ElementReference _host;
+    private DotNetObjectReference<BurnChart>? _self;
+    private bool _observing;
+
+    private double _w = 720, _h = 320;
+    private double _left = 50, _right = 700, _top = 14, _bottom = 290;
+    private double _step = 20, _limitY;
+    private decimal _yMax = 1;
+    private IReadOnlyList<decimal> _ticks = [];
+    private List<BurnPoint> _labelled = [];
+    private string _actualPath = "", _areaPath = "", _pacePath = "";
+    private BurnPoint? _lastActual;
+    private bool _overShown;
+
+    private string N(double v) => v.ToString("0.##", Inv);
+
+    private double X(int day) => Points.Count <= 1 ? _left : ChartScale.Map(day, 1, Points.Count, _left + _step / 2, _right - _step / 2);
+    private double Y(decimal v) => ChartScale.Map((double)v, 0, (double)_yMax, _bottom, _top);
+
+    protected override void OnParametersSet() => Layout();
+
+    [JSInvokable]
+    public void OnWidth(double width)
+    {
+        if (Math.Abs(width - _w) < 1) return;
+        _w = width;
+        Layout();
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _observing) return;
+        _observing = true;
+        _self = DotNetObjectReference.Create(this);
+        try { await JS.InvokeVoidAsync("glass.observeWidth", _host, _self); }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or InvalidOperationException or TaskCanceledException) { /* static render or circuit gone: keep the default width */ }
+    }
+
+    private void Layout()
+    {
+        var narrow = _w < 480;
+        _h = narrow ? 270 : _w < 820 ? 310 : 340;
+        _left = narrow ? 42 : 52;
+        _right = _w - (narrow ? 10 : 16);
+        _top = 14;
+        _bottom = _h - 28;
+
+        var maxActual = Points.Where(p => p.Cumulative is not null).Select(p => p.Cumulative!.Value).DefaultIfEmpty(0m).Max();
+        var maxPace = Points.Select(p => p.EvenPace).DefaultIfEmpty(0m).Max();
+        var top = Math.Max(Math.Max(Limit, maxActual), maxPace) * 1.04m;
+        _ticks = ChartScale.NiceTicks(top, narrow ? 3 : 4);
+        _yMax = _ticks[^1];
+
+        _step = Points.Count == 0 ? 20 : (_right - _left) / Points.Count;
+        _limitY = Limit > 0m ? Y(Limit) : 0;
+
+        // Day labels: day 1 and every k-th day, spaced at least ~34px apart.
+        var k = new[] { 1, 5, 10 }.First(c => _step * c >= 40 || c == 10);
+        _labelled = Points.Where(p => p.DayOfMonth == 1 || (p.DayOfMonth % k == 0 && Points.Count - p.DayOfMonth >= k / 2.0)).ToList();
+
+        var actual = Points.Where(p => p.Cumulative is not null).ToList();
+        _lastActual = actual.LastOrDefault();
+        _actualPath = actual.Count == 0 ? "" : string.Join(" ", actual.Select((p, i) => $"{(i == 0 ? "M" : "L")} {N(X(p.DayOfMonth))} {N(Y(p.Cumulative!.Value))}"));
+        _areaPath = actual.Count == 0 ? "" : _actualPath + $" L {N(X(actual[^1].DayOfMonth))} {N(_bottom)} L {N(X(actual[0].DayOfMonth))} {N(_bottom)} Z";
+        _pacePath = Points.Count == 0 ? "" : "M " + string.Join(" L ", Points.Select(p => $"{N(X(p.DayOfMonth))} {N(Y(p.EvenPace))}"));
+        _overShown = Limit > 0m && maxActual > Limit;
+    }
+
+    private string DayLabel(BurnPoint p) => p.Cumulative is null
+        ? $"{Fmt.DayMonth(p.Day)}: not reached yet. Even pace {Fmt.Credits(p.EvenPace)} credits."
+        : $"{Fmt.DayMonth(p.Day)}: {Fmt.Credits(p.Credits)} credits that day, {Fmt.Credits(p.Cumulative.Value)} cumulative, even pace {Fmt.Credits(p.EvenPace)}.";
+
+    private string Summary
+    {
+        get
+        {
+            if (_lastActual is null) return "Burn chart: no days reached yet.";
+            var over = Limit > 0m && _lastActual.Cumulative > Limit ? " The pool limit has been passed." : "";
+            return $"Burn chart: {Fmt.Credits(_lastActual.Cumulative!.Value)} credits cumulative by {Fmt.DayMonth(_lastActual.Day)}, against a pool limit of {Fmt.Credits(Limit)} and an even pace of {Fmt.Credits(_lastActual.EvenPace)}.{over} Each day can be focused for its figures.";
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_observing)
+        {
+            try { await JS.InvokeVoidAsync("glass.unobserveWidth", _host); }
+            catch (Exception ex) when (ex is JSException or JSDisconnectedException or InvalidOperationException or TaskCanceledException) { }
+        }
+        _self?.Dispose();
+    }
+}

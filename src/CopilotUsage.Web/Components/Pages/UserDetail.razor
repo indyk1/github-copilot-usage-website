@@ -1,0 +1,9 @@
+@page "/users/{Login}"
+
+<PageTitle>@Login · Copilot Usage</PageTitle>
+
+<ComingSoon Title="@Login" Text="The per-user page (credits against fair share, models, features and productivity) arrives in the next phase." />
+
+@code {
+    [Parameter] public string Login { get; set; } = "";
+}

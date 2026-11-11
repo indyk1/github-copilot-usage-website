@@ -1,0 +1,10 @@
+@* Razor reserves the <text> tag, so SVG text goes through this wrapper. *@
+<text class="@Class" x="@X" y="@Y" text-anchor="@Anchor">@ChildContent</text>
+
+@code {
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public object? X { get; set; }
+    [Parameter] public object? Y { get; set; }
+    [Parameter] public string? Anchor { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

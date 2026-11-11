@@ -1,0 +1,62 @@
+.empty { color: var(--ink-1); }
+.board { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
+
+.row {
+    display: grid;
+    grid-template-columns: 1.8rem minmax(10rem, 1.7fr) minmax(6.5rem, 0.7fr) minmax(5.5rem, 0.6fr) minmax(10rem, 1.3fr) 1rem;
+    align-items: center;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--s-4);
+    border-radius: var(--r-md);
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.035);
+    text-decoration: none;
+    transition: transform var(--dur-med) var(--ease-out), background var(--dur-fast), border-color var(--dur-fast);
+}
+.row:hover { background: rgba(255, 255, 255, 0.085); border-color: var(--glass-border); transform: translateY(-2px); }
+.row.over { border-color: rgba(251, 111, 138, 0.28); }
+.row.idle .login, .row.idle .credits { color: var(--ink-1); }
+
+.rank { color: var(--ink-1); font-weight: 700; text-align: right; }
+.who { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
+.login { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.credits strong { font-size: var(--fs-md); }
+.unit { color: var(--ink-2); font-size: var(--fs-xs); font-weight: 500; }
+.share { color: var(--ink-0); }
+.fair { display: grid; gap: 0.35rem; min-width: 0; }
+.fair-text { color: var(--ink-1); font-size: var(--fs-xs); }
+.over-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0 0.45rem;
+    border-radius: var(--r-pill);
+    background: var(--danger-bg);
+    border: 1px solid rgba(251, 111, 138, 0.4);
+    color: var(--danger-ink);
+    font-weight: 700;
+}
+.go { color: var(--ink-2); display: grid; place-items: center; transition: transform var(--dur-fast), color var(--dur-fast); }
+.row:hover .go { color: var(--ink-0); transform: translateX(2px); }
+
+.foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3) var(--s-4); margin-top: var(--s-4); }
+.note { display: flex; gap: var(--s-2); align-items: flex-start; color: var(--ink-1); font-size: var(--fs-sm); max-width: 52ch; }
+.note ::deep .icon { margin-top: 0.2rem; }
+
+/* Phones: two lines per user, number and name on top, bar underneath */
+@media (max-width: 760px) {
+    .row {
+        grid-template-columns: 1.6rem minmax(0, 1fr) auto 0.9rem;
+        grid-template-areas:
+            "rank who credits go"
+            ".    fair  share share";
+        gap: var(--s-2) var(--s-3);
+        padding: var(--s-3);
+    }
+    .rank { grid-area: rank; }
+    .who { grid-area: who; }
+    .credits { grid-area: credits; text-align: right; }
+    .share { grid-area: share; text-align: right; font-size: var(--fs-xs); color: var(--ink-1); }
+    .fair { grid-area: fair; }
+    .go { grid-area: go; }
+}

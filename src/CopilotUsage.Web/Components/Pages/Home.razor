@@ -1,45 +1,271 @@
 @page "/"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IDisposable
+@using CopilotUsage.Core
+@using CopilotUsage.Data.Entities
 @using CopilotUsage.Data.Queries
-@inject UsageQueries Queries
+@using CopilotUsage.Web.Config
+@using CopilotUsage.Web.Sync
+@inject IServiceScopeFactory Scopes
+@inject ISyncService Sync
+@inject TimeProvider Time
+@inject IOptions<DemoOptions> Demo
+@inject IOptions<CopilotOptions> Copilot
+@inject ILogger<Home> Logger
 
-<PageTitle>Copilot Usage</PageTitle>
+<PageTitle>Overview · Copilot Usage</PageTitle>
 
-<main style="font-family: system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem;">
-    <h1>Copilot Usage Dashboard</h1>
-    <p><strong>Placeholder page.</strong> The foundation (data, sync, queries) is running; the real UI is built in the next phase.</p>
+<div class="home">
+    <header class="page-head">
+        <div class="titles">
+            <p class="eyebrow">Organization overview@(_summary is null ? null : " · " + Fmt.Month(_summary.Month))</p>
+            <h1>Copilot AI credits</h1>
+        </div>
 
-    @if (_summary is null)
+        <div class="freshness">
+            <div class="asof" id="asof">
+                <Icon Name="clock" Size="15" />
+                @if (_summary?.DataAsOf is { } asOf)
+                {
+                    <span>Data as of <time datetime="@asOf.UtcDateTime.ToString("o")">@Fmt.Timestamp(asOf)</time> <span class="faint">(@Fmt.Relative(asOf, Time.GetUtcNow()))</span></span>
+                }
+                else
+                {
+                    <span>@(_loading ? "Loading…" : "Never synced")</span>
+                }
+            </div>
+            <button type="button" class="btn btn-primary refresh" disabled="@_syncing" aria-busy="@(_syncing ? "true" : "false")" @onclick="RefreshAsync">
+                <span class="@(_syncing ? "spin" : null)"><Icon Name="refresh" Size="16" /></span>
+                <span>@(_syncing ? "Refreshing…" : "Refresh")</span>
+            </button>
+        </div>
+
+        <div class="sync-status" role="status" aria-live="polite">
+            @if (_syncing)
+            {
+                <span>@(Demo.Value.Enabled ? "Refreshing demo data…" : "Syncing from GitHub. This can take a minute…")</span>
+            }
+            else if (_refreshNote is not null)
+            {
+                <span>@_refreshNote</span>
+            }
+        </div>
+        @if (_syncing)
+        {
+            <div class="indeterminate" aria-hidden="true"><i></i></div>
+        }
+    </header>
+
+    @if (_summary?.LastSync is { } last && last.Status == nameof(SyncStatus.Failed))
     {
-        <p>Loading...</p>
+        <div class="banner danger" role="alert">
+            <StatusBadge Tone="StatusBadge.BadgeTone.Danger" Text="Sync failed" />
+            <div>
+                <p><strong>The last sync failed</strong> at @Fmt.Timestamp(last.FinishedAt ?? last.StartedAt).
+                    @if (_summary.DataAsOf is { } good)
+                    {
+                        <span>The figures below are the last good data, from @Fmt.Timestamp(good).</span>
+                    }
+                    else
+                    {
+                        <span>There is no earlier data to show.</span>
+                    }
+                </p>
+                @if (!string.IsNullOrWhiteSpace(last.Error))
+                {
+                    <p class="detail">@Shorten(last.Error)</p>
+                }
+            </div>
+        </div>
+    }
+    else if (_summary?.LastSync is { } partial && partial.Status == nameof(SyncStatus.PartialFailure))
+    {
+        <div class="banner warn" role="status">
+            <StatusBadge Tone="StatusBadge.BadgeTone.Warn" Text="Partly updated" />
+            <div>
+                <p><strong>The last sync only partly completed</strong> (@Fmt.Timestamp(partial.FinishedAt ?? partial.StartedAt)). Some figures may be out of date.</p>
+                @if (!string.IsNullOrWhiteSpace(partial.Error))
+                {
+                    <p class="detail">@Shorten(partial.Error)</p>
+                }
+            </div>
+        </div>
+    }
+
+    @if (_loadError is not null)
+    {
+        <div class="banner danger" role="alert">
+            <StatusBadge Tone="StatusBadge.BadgeTone.Danger" Text="Could not load" />
+            <p>@_loadError</p>
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="skeleton" role="status" aria-label="Loading figures"><div></div><div></div><div></div></div>
+    }
+    else if (_summary is null)
+    {
+        @* The load failed and there is nothing earlier to show; the banner above says why. *@
+    }
+    else if (_summary.DataAsOf is null)
+    {
+        <GlassCard Class="empty">
+            <Icon Name="database" Size="28" />
+            <h2>No data yet</h2>
+            <p>The first sync has not completed, so there is nothing to show. @(Demo.Value.Enabled
+                ? "Demo data is loaded when the app starts; use Refresh to load it now."
+                : "Press Refresh to run a sync now. It otherwise runs by itself on a schedule.")</p>
+        </GlassCard>
+    }
+    else if (_summary.Pool.Seats == 0)
+    {
+        <GlassCard Class="empty">
+            <Icon Name="users" Size="28" />
+            <h2>No Copilot seats found</h2>
+            <p>The last sync found no Copilot seats in the organization, so there is no credit pool to measure. Assign seats on GitHub, then press Refresh.</p>
+        </GlassCard>
     }
     else
     {
-        <h2>@_summary.Month</h2>
-        <ul>
-            <li id="mode">Mode: @(_summary.LastSync?.IsDemo == true ? "DEMO (synthetic data)" : "live")</li>
-            <li id="pool">Pool: @_summary.Pool.Used.ToString("N0") of @_summary.Pool.Limit.ToString("N0") credits (@_summary.Pool.Seats seats x @_summary.Pool.CreditsPerSeat.ToString("N0"))</li>
-            <li id="remaining">Remaining: @_summary.Pool.Remaining.ToString("N0") credits; overage $@_summary.Pool.OverageDollars.ToString("N2")</li>
-            <li id="reset">Days until reset: @_summary.DaysUntilReset</li>
-            <li id="asof">Data as of: @(_summary.DataAsOf?.ToString("u") ?? "never synced")</li>
-        </ul>
+        var pool = _summary.Pool;
+        var over = pool.IsOverLimit;
+        var pace = _summary.Burn.LastOrDefault(p => p.Cumulative is not null) is { } today && pool.Limit > 0m ? today.EvenPace / pool.Limit * 100m : (decimal?)null;
 
-        <h2>Top users</h2>
-        <ol>
-            @foreach (var row in _top)
-            {
-                <li>@row.Login: @row.Credits.ToString("N0") credits (@(row.FairSharePercent?.ToString("N0") ?? "-")% of fair share)</li>
-            }
-        </ol>
+        if (pool.Used <= 0m)
+        {
+            <div class="banner info" role="status">
+                <StatusBadge Tone="StatusBadge.BadgeTone.Info" Text="No usage yet" />
+                <p>No credits have been used so far this month. Figures appear here after the next sync.</p>
+            </div>
+        }
+
+        <div class="hero">
+            <GlassCard Class="gauge-card" aria-labelledby="pool-h" Tone="@(over ? GlassCard.CardTone.Danger : GlassCard.CardTone.Neutral)">
+                <SectionHeading Id="pool-h" Title="Credit pool"
+                                Subtitle="@($"{Fmt.Plural(pool.Seats, "seat")} × {Fmt.Credits(pool.CreditsPerSeat)} credits, shared by everyone")" />
+                <PoolGauge Pool="pool" PacePercent="pace" />
+            </GlassCard>
+
+            <div class="tiles">
+                <StatTile Label="Credits remaining" Icon="coins">
+                    <Value><CountUp Value="pool.Remaining" Text="@Fmt.Credits(pool.Remaining)" /></Value>
+                    <Hint>of @Fmt.Credits(pool.Limit) in the pool</Hint>
+                </StatTile>
+
+                <StatTile Label="Value used" Icon="dollar">
+                    <Value><CountUp Value="pool.UsedDollars" Decimals="2" Prefix="$" Text="@Fmt.Dollars(pool.UsedDollars)" /></Value>
+                    <Hint>@Fmt.Credits(pool.Used) credits at $0.01 each</Hint>
+                </StatTile>
+
+                <StatTile Label="Overage so far" Icon="alert" Tone="@(over ? StatTile.StatTone.Danger : StatTile.StatTone.Good)"
+                          Status="@(over ? "Over the pool" : "Within the pool")">
+                    <Value><CountUp Value="pool.OverageCredits" Text="@Fmt.Credits(pool.OverageCredits)" /><span class="unit">credits</span></Value>
+                    <Hint>@Fmt.Dollars(pool.OverageDollars) at $0.01 per credit</Hint>
+                </StatTile>
+
+                <StatTile Label="Days until reset" Icon="calendar">
+                    <Value><CountUp Value="_summary.DaysUntilReset" Text="@_summary.DaysUntilReset.ToString()" /><span class="unit">@(_summary.DaysUntilReset == 1 ? "day" : "days")</span></Value>
+                    <Hint>Resets @Fmt.DayMonth(_summary.Month.NextStart) at 00:00 UTC</Hint>
+                </StatTile>
+
+                <StatTile Label="Active seats" Icon="users" Class="wide">
+                    <Value><CountUp Value="_summary.ActiveThisCycle" Text="@_summary.ActiveThisCycle.ToString()" /></Value>
+                    <Hint>of @Fmt.Plural(pool.Seats, "seat"). The pool counts every seat, active or not.</Hint>
+                </StatTile>
+            </div>
+        </div>
+
+        <GlassCard aria-labelledby="burn-h">
+            <SectionHeading Id="burn-h" Title="Burn chart" Subtitle="@($"Cumulative credits by day, {Fmt.Month(_summary.Month)}, against the pool limit and an even pace.")" />
+            <BurnChart Points="_summary.Burn" Limit="pool.Limit" />
+        </GlassCard>
+
+        <div class="lower">
+            <GlassCard aria-labelledby="board-h" Class="board-card">
+                <SectionHeading Id="board-h" Title="Leaderboard" Subtitle="Credits used this month, highest first." />
+                <Leaderboard Rows="_rows" FairShare="pool.CreditsPerSeat" />
+            </GlassCard>
+
+            <GlassCard aria-labelledby="models-h" Class="models-card">
+                <SectionHeading Id="models-h" Title="Model split" Subtitle="Org-wide credits by model this month." />
+                <ModelBars Models="_summary.ModelSplit" />
+            </GlassCard>
+        </div>
     }
-</main>
+</div>
 
 @code {
+    private const int MaxErrorLength = 240;
+
     private HomeSummary? _summary;
-    private IReadOnlyList<LeaderboardRow> _top = [];
+    private IReadOnlyList<LeaderboardRow> _rows = [];
+    private string? _loadError;
+    private string? _refreshNote;
+    private bool _loading = true;
+    private bool _syncing;
+    private bool _disposed;
 
     protected override async Task OnInitializedAsync()
     {
-        _summary = await Queries.GetHomeSummaryAsync();
-        _top = (await Queries.GetLeaderboardAsync()).Take(5).ToList();
+        await LoadAsync();
+        _loading = false;
     }
+
+    /// <summary>Reads only from the query layer (SQLite). On failure the previous figures stay on screen.</summary>
+    private async Task LoadAsync()
+    {
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+            var queries = scope.ServiceProvider.GetRequiredService<UsageQueries>();
+            var summary = await queries.GetHomeSummaryAsync();
+            var rows = await queries.GetLeaderboardAsync();
+            (_summary, _rows, _loadError) = (summary, rows, null);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not load the home page figures.");
+            _loadError = _summary is null
+                ? "The figures could not be read from the database."
+                : "The figures could not be reloaded; the earlier ones are still shown.";
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_syncing) return;
+        _syncing = true;
+        _refreshNote = null;
+        StateHasChanged();
+        var started = Time.GetTimestamp();
+        try
+        {
+            // Not tied to this page's lifetime: a sync that has begun should finish even if the user navigates away.
+            var result = await Sync.RunAsync(SyncTrigger.Manual);
+            if (result.Skipped)
+                while (Sync.IsRunning && !_disposed) await Task.Delay(500);
+
+            // Keep the "refreshing" state visible long enough to be noticed when the sync is very quick.
+            var elapsed = Time.GetElapsedTime(started);
+            if (elapsed < TimeSpan.FromMilliseconds(700)) await Task.Delay(TimeSpan.FromMilliseconds(700) - elapsed);
+
+            await LoadAsync();
+            _refreshNote = result.Status == SyncStatus.Failed ? "The refresh failed. See the message above." : "Figures reloaded.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Manual refresh failed.");
+            _refreshNote = "The refresh could not be run.";
+        }
+        finally
+        {
+            _syncing = false;
+            if (!_disposed) await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string Shorten(string text) => text.Length <= MaxErrorLength ? text : text[..MaxErrorLength] + "…";
+
+    public void Dispose() => _disposed = true;
 }

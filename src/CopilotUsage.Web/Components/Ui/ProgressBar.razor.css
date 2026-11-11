@@ -1,0 +1,33 @@
+.pbar { width: 100%; }
+.track {
+    position: relative;
+    height: 0.6rem;
+    border-radius: var(--r-pill);
+    background: var(--track);
+    overflow: visible;
+}
+.fill {
+    height: 100%;
+    border-radius: var(--r-pill);
+    background: var(--grad-brand);
+    transform-origin: left center;
+    animation: grow var(--dur-sweep) var(--ease-out) both;
+    min-width: 0.35rem;
+}
+.over .fill {
+    background:
+        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.28) 0 4px, transparent 4px 8px),
+        var(--grad-danger);
+}
+/* The target mark: a short vertical line crossing the track */
+.tick {
+    position: absolute;
+    top: -0.25rem;
+    bottom: -0.25rem;
+    width: 2px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--ink-0);
+    opacity: 0.85;
+}
+@keyframes grow { from { transform: scaleX(0); } }

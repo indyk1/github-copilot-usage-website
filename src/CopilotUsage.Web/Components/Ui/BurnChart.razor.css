@@ -1,0 +1,54 @@
+.burn { width: 100%; min-width: 0; }
+svg { width: 100%; height: auto; overflow: visible; }
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2) var(--s-5);
+    margin: 0 0 var(--s-3);
+    padding: 0;
+    list-style: none;
+    color: var(--ink-1);
+    font-size: var(--fs-sm);
+}
+.legend li { display: inline-flex; align-items: center; gap: var(--s-2); }
+.key { display: inline-block; width: 1.6rem; height: 0; border-top-width: 3px; border-top-style: solid; border-radius: 2px; }
+.key-actual { border-image: var(--grad-brand) 1; border-top-width: 3px; }
+.key-limit { border-top-color: var(--ink-0); border-top-style: dashed; border-top-width: 2px; }
+.key-pace { border-top-color: var(--ink-1); border-top-style: dotted; border-top-width: 3px; }
+
+.s-violet { stop-color: var(--violet); }
+.s-blue { stop-color: var(--blue); }
+.s-teal { stop-color: var(--teal); }
+.s-area-top { stop-color: var(--blue); stop-opacity: 0.32; }
+.s-area-bottom { stop-color: var(--violet); stop-opacity: 0; }
+
+.grid { stroke: var(--grid-line); stroke-width: 1; }
+svg ::deep .axis { fill: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.limit { stroke: var(--ink-0); stroke-width: 1.5; stroke-dasharray: 7 5; opacity: 0.85; }
+svg ::deep .limit-label { fill: var(--ink-0); font-size: 12px; font-weight: 600; paint-order: stroke; stroke: var(--bg-0); stroke-width: 3px; stroke-linejoin: round; }
+.pace { fill: none; stroke: var(--ink-1); stroke-width: 2; stroke-dasharray: 1.5 5; stroke-linecap: round; }
+
+.area { fill: url(#burn-area); stroke: none; animation: fade-in 1s var(--ease-out) 0.4s both; }
+.line { fill: none; stroke: url(#burn-line); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 6px rgba(78, 164, 255, 0.5)); }
+.line.over { stroke: var(--rose); filter: drop-shadow(0 0 6px rgba(251, 111, 138, 0.6)); }
+.now-dot { fill: var(--ink-0); stroke: var(--blue); stroke-width: 2.5; }
+
+.line { stroke-dasharray: 1; animation: draw 1.4s var(--ease-out) both; }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+
+.hit { fill: transparent; cursor: crosshair; }
+.day { outline: none; }
+.day:focus-visible .guide { stroke: var(--focus); }
+.reveal { opacity: 0; transition: opacity var(--dur-fast); }
+.day:hover .reveal, .day:focus .reveal { opacity: 1; }
+.guide { stroke: var(--glass-border-strong); stroke-width: 1; }
+.dot { fill: var(--ink-0); stroke: var(--blue); stroke-width: 2.5; }
+.pace-dot { fill: var(--ink-1); stroke: none; }
+.tip-box { fill: var(--glass-bg-solid); stroke: var(--glass-border-strong); stroke-width: 1; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.5)); }
+svg ::deep .tip-title { fill: var(--ink-0); font-size: 13px; font-weight: 700; }
+svg ::deep .tip-k { fill: var(--ink-1); font-size: 12px; }
+svg ::deep .tip-v { fill: var(--ink-0); font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+@keyframes fade-in { from { opacity: 0; } }

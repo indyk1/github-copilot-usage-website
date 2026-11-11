@@ -1,0 +1,20 @@
+.label {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    color: var(--ink-1);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+}
+.value {
+    margin-top: var(--s-2);
+    font-size: var(--fs-2xl);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+}
+.status { margin-top: var(--s-2); }
+.hint { margin-top: var(--s-2); color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.35; }
+.danger .value { color: var(--danger-ink); }
+.warn .value { color: var(--warn-ink); }

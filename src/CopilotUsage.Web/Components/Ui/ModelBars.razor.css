@@ -1,0 +1,17 @@
+.models { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-4); }
+.top { display: flex; justify-content: space-between; gap: var(--s-3); align-items: baseline; margin-bottom: var(--s-2); }
+.name { display: inline-flex; align-items: center; gap: var(--s-2); min-width: 0; overflow-wrap: anywhere; }
+.swatch { flex: none; width: 0.7rem; height: 0.7rem; border-radius: 3px; background: var(--c); }
+.figs { white-space: nowrap; }
+.pct { color: var(--ink-1); margin-left: var(--s-2); font-size: var(--fs-sm); }
+.bar { height: 0.55rem; border-radius: var(--r-pill); background: var(--track); overflow: hidden; }
+.fill {
+    height: 100%;
+    border-radius: var(--r-pill);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--c) 55%, transparent), var(--c));
+    transform-origin: left center;
+    animation: grow var(--dur-sweep) var(--ease-out) both;
+    min-width: 0.3rem;
+}
+.empty { color: var(--ink-1); }
+@keyframes grow { from { transform: scaleX(0); } }

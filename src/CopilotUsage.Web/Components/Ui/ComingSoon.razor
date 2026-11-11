@@ -1,0 +1,11 @@
+<GlassCard Class="soon">
+    <StatusBadge Tone="StatusBadge.BadgeTone.Info" Icon="clock" Text="Coming soon" />
+    <h1>@Title</h1>
+    <p>@Text</p>
+    <a class="btn" href="/">Back to the overview</a>
+</GlassCard>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+}

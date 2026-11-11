@@ -1,0 +1,304 @@
+/* ==========================================================================
+   Glass and aurora: the one theme file.
+   Every colour, radius, blur, spacing step and duration is a custom property here;
+   component stylesheets only reference these variables. No external fonts or assets.
+   ========================================================================== */
+
+:root {
+    color-scheme: dark;
+
+    /* Base */
+    --bg-0: #050814;
+    --bg-1: #0a1022;
+
+    /* Text (contrast against the glass surface, worst case: primary 15:1, secondary 9:1, tertiary 5.5:1) */
+    --ink-0: #f1f4fd;
+    --ink-1: #bcc5de;
+    --ink-2: #94a0c0;
+
+    /* Accents */
+    --violet: #8f7cff;
+    --blue: #4ea4ff;
+    --teal: #2fd6c0;
+    --amber: #fbbf47;
+    --rose: #fb6f8a;
+    --orange: #fb923c;
+    --green: #4ade80;
+
+    /* Status: a tint for backgrounds and a lighter ink for text, always paired with an icon or label in the UI */
+    --ok: var(--teal);
+    --ok-ink: #7ef0de;
+    --ok-bg: rgba(47, 214, 192, 0.14);
+    --warn: var(--amber);
+    --warn-ink: #ffd97a;
+    --warn-bg: rgba(251, 191, 71, 0.15);
+    --danger: var(--rose);
+    --danger-ink: #ffb0c0;
+    --danger-bg: rgba(251, 111, 138, 0.16);
+    --info-ink: #a9c9ff;
+    --info-bg: rgba(78, 164, 255, 0.15);
+
+    /* Gradients (strokes and bars) */
+    --grad-brand: linear-gradient(120deg, var(--violet) 0%, var(--blue) 55%, var(--teal) 100%);
+    --grad-warn: linear-gradient(120deg, var(--amber) 0%, var(--orange) 100%);
+    --grad-danger: linear-gradient(120deg, var(--orange) 0%, var(--rose) 60%, #f43f8e 100%);
+    --grad-text: linear-gradient(120deg, #ffffff 0%, #c9d4ff 100%);
+
+    /* Glass surfaces */
+    --glass-bg: rgba(18, 25, 52, 0.62);
+    --glass-bg-solid: #121934;
+    --glass-bg-hover: rgba(24, 33, 68, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.13);
+    --glass-border-strong: rgba(255, 255, 255, 0.24);
+    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    --glass-blur: 22px;
+    --glass-saturate: 140%;
+    --glow: 0 18px 50px -18px rgba(110, 100, 255, 0.45), 0 2px 10px rgba(0, 0, 0, 0.35);
+    --glow-hover: 0 22px 60px -16px rgba(90, 140, 255, 0.55), 0 2px 12px rgba(0, 0, 0, 0.4);
+    --glow-danger: 0 18px 55px -16px rgba(251, 111, 138, 0.5), 0 2px 10px rgba(0, 0, 0, 0.35);
+
+    /* Tracks (empty part of bars and gauges) */
+    --track: rgba(255, 255, 255, 0.09);
+    --track-strong: rgba(255, 255, 255, 0.16);
+    --grid-line: rgba(255, 255, 255, 0.08);
+
+    /* Focus */
+    --focus: #8fd0ff;
+
+    /* Aurora light */
+    --aurora-violet: rgba(124, 92, 255, 0.55);
+    --aurora-teal: rgba(30, 205, 185, 0.40);
+    --aurora-blue: rgba(52, 130, 255, 0.50);
+    --aurora-blur: 70px;
+    --aurora-opacity: 0.85;
+
+    /* Data series (model split), each distinct in hue and lightness */
+    --series-1: #8f7cff;
+    --series-2: #4ea4ff;
+    --series-3: #2fd6c0;
+    --series-4: #fbbf47;
+    --series-5: #fb6f8a;
+    --series-6: #c084fc;
+    --series-7: #94a3b8;
+
+    /* Radii */
+    --r-xs: 6px;
+    --r-sm: 10px;
+    --r-md: 14px;
+    --r-lg: 22px;
+    --r-xl: 28px;
+    --r-pill: 999px;
+
+    /* Spacing */
+    --s-1: 0.25rem;
+    --s-2: 0.5rem;
+    --s-3: 0.75rem;
+    --s-4: 1rem;
+    --s-5: 1.5rem;
+    --s-6: 2rem;
+    --s-7: 3rem;
+    --s-8: 4.5rem;
+    --gutter: clamp(1rem, 3.2vw, 2.5rem);
+    --content-max: 1280px;
+
+    /* Type */
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    --fs-xs: 0.75rem;
+    --fs-sm: 0.875rem;
+    --fs-md: 1rem;
+    --fs-lg: 1.25rem;
+    --fs-xl: 1.75rem;
+    --fs-2xl: clamp(1.9rem, 1.4rem + 1.6vw, 2.6rem);
+    --fs-hero: clamp(2.6rem, 2rem + 3vw, 3.8rem);
+    --lh-tight: 1.15;
+    --lh-body: 1.5;
+
+    /* Motion */
+    --dur-fast: 0.18s;
+    --dur-med: 0.35s;
+    --dur-sweep: 1.4s;
+    --ease-out: cubic-bezier(0.22, 0.8, 0.26, 1);
+    --lift: -3px;
+}
+
+/* ---------- Base ---------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+    background: var(--bg-0);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+        radial-gradient(1200px 700px at 12% -10%, rgba(40, 52, 120, 0.35), transparent 60%),
+        linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+    background-color: var(--bg-0);
+    color: var(--ink-0);
+    font-family: var(--font-sans);
+    font-size: var(--fs-md);
+    line-height: var(--lh-body);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
+}
+
+h1, h2, h3, h4 { margin: 0; line-height: var(--lh-tight); font-weight: 650; letter-spacing: -0.01em; }
+p { margin: 0; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+svg { display: block; }
+
+h1:focus, h2:focus { outline: none; }
+
+:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+    border-radius: var(--r-xs);
+}
+
+::selection { background: rgba(143, 124, 255, 0.45); }
+
+.num { font-variant-numeric: tabular-nums lining-nums; font-feature-settings: "tnum" 1, "lnum" 1; }
+.muted { color: var(--ink-1); }
+.faint { color: var(--ink-2); }
+
+.visually-hidden {
+    position: absolute !important;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+.skip-link {
+    position: absolute;
+    left: var(--s-4);
+    top: -4rem;
+    z-index: 100;
+    padding: var(--s-2) var(--s-4);
+    background: var(--glass-bg-solid);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--r-pill);
+    text-decoration: none;
+    transition: top var(--dur-fast);
+}
+.skip-link:focus { top: var(--s-3); }
+
+/* ---------- Aurora (slow blurred light behind everything) ---------- */
+
+.aurora {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.aurora i {
+    position: absolute;
+    display: block;
+    width: 62vmax;
+    height: 62vmax;
+    border-radius: 50%;
+    filter: blur(var(--aurora-blur));
+    opacity: var(--aurora-opacity);
+    will-change: transform;
+}
+
+.aurora i:nth-child(1) {
+    left: -18vmax; top: -22vmax;
+    background: radial-gradient(circle at 50% 50%, var(--aurora-violet), transparent 68%);
+    animation: aurora-a 46s ease-in-out infinite alternate;
+}
+.aurora i:nth-child(2) {
+    right: -22vmax; top: 6vmax;
+    background: radial-gradient(circle at 50% 50%, var(--aurora-blue), transparent 68%);
+    animation: aurora-b 58s ease-in-out infinite alternate;
+}
+.aurora i:nth-child(3) {
+    left: 18vw; bottom: -34vmax;
+    background: radial-gradient(circle at 50% 50%, var(--aurora-teal), transparent 68%);
+    animation: aurora-c 52s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-a { to { transform: translate3d(14vmax, 10vmax, 0) scale(1.12); } }
+@keyframes aurora-b { to { transform: translate3d(-12vmax, 12vmax, 0) scale(0.92); } }
+@keyframes aurora-c { to { transform: translate3d(-10vmax, -12vmax, 0) scale(1.1); } }
+
+/* ---------- Buttons and chips ---------- */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-2);
+    min-height: 2.5rem;
+    padding: 0 var(--s-4);
+    border-radius: var(--r-pill);
+    border: 1px solid var(--glass-border-strong);
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--ink-0);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast), box-shadow var(--dur-fast);
+}
+.btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.13); border-color: rgba(255, 255, 255, 0.4); transform: translateY(-1px); }
+.btn:active:not(:disabled) { transform: translateY(0); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.65; cursor: progress; }
+
+.btn-primary {
+    border-color: transparent;
+    background: linear-gradient(120deg, #6d5cf0 0%, #3b82f6 60%, #14b8a6 130%);
+    color: #ffffff;
+    box-shadow: 0 8px 28px -10px rgba(90, 120, 255, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.btn-primary:hover:not(:disabled) { background: linear-gradient(120deg, #7a6bf5 0%, #4a8cf7 60%, #1fc4b3 130%); border-color: transparent; }
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.2em 0.7em;
+    border-radius: var(--r-pill);
+    border: 1px solid transparent;
+    font-size: var(--fs-xs);
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.badge-ok { color: var(--ok-ink); background: var(--ok-bg); border-color: rgba(47, 214, 192, 0.35); }
+.badge-warn { color: var(--warn-ink); background: var(--warn-bg); border-color: rgba(251, 191, 71, 0.4); }
+.badge-danger { color: var(--danger-ink); background: var(--danger-bg); border-color: rgba(251, 111, 138, 0.45); }
+.badge-info { color: var(--info-ink); background: var(--info-bg); border-color: rgba(78, 164, 255, 0.4); }
+
+/* Count-up numbers should not shift layout while they tick */
+[data-countup] { font-variant-numeric: tabular-nums lining-nums; }
+
+/* ---------- Reduced motion: the aurora, sweeps, count-ups and lifts all stop ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-delay: 0s !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+    .aurora i { animation: none !important; }
+}
+
+/* Browsers without backdrop-filter get a more opaque card so text stays readable */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    :root { --glass-bg: rgba(18, 25, 52, 0.92); --glass-bg-hover: rgba(24, 33, 68, 0.95); }
+}

@@ -1,0 +1,128 @@
+@using CopilotUsage.Core.Calculations
+@* The hero meter: a 270 degree ring filled to the share of the pool used. The ring changes colour AND a label says why
+   (warning past 90%, "Pool exhausted" once spent), so the state never depends on hue alone. *@
+<div class="gauge @StateClass">
+    <div class="ring-wrap">
+        <svg viewBox="0 0 320 290" role="img" aria-label="@AriaLabel" focusable="false">
+            <defs>
+                <linearGradient id="gauge-grad-ok" gradientUnits="userSpaceOnUse" x1="40" y1="230" x2="280" y2="60">
+                    <stop offset="0" class="s-violet" /><stop offset="0.55" class="s-blue" /><stop offset="1" class="s-teal" />
+                </linearGradient>
+                <linearGradient id="gauge-grad-warn" gradientUnits="userSpaceOnUse" x1="40" y1="230" x2="280" y2="60">
+                    <stop offset="0" class="s-amber" /><stop offset="1" class="s-orange" />
+                </linearGradient>
+                <linearGradient id="gauge-grad-danger" gradientUnits="userSpaceOnUse" x1="40" y1="230" x2="280" y2="60">
+                    <stop offset="0" class="s-orange" /><stop offset="0.6" class="s-rose" /><stop offset="1" class="s-magenta" />
+                </linearGradient>
+            </defs>
+            <path class="track" d="@_trackPath" />
+            @if (_fraction > 0)
+            {
+                <path class="arc" d="@_trackPath" pathLength="100" style="--p: @_dash" stroke="url(#@GradientId)" />
+            }
+            @if (State != PoolState.NoPool && PacePercent is { } pace)
+            {
+                <line class="pace" x1="@_paceA.X.ToString("0.##", Inv)" y1="@_paceA.Y.ToString("0.##", Inv)" x2="@_paceB.X.ToString("0.##", Inv)" y2="@_paceB.Y.ToString("0.##", Inv)" />
+            }
+            <SvgText Class="end" X="@_endLeft.X.ToString("0.##", Inv)" Y="268" Anchor="middle">0</SvgText>
+            <SvgText Class="end" X="@_endRight.X.ToString("0.##", Inv)" Y="268" Anchor="middle">@Fmt.Compact(Pool.Limit)</SvgText>
+        </svg>
+        <div class="center">
+            @if (State == PoolState.NoPool)
+            {
+                <div class="kicker">Pool</div>
+                <div class="big small-text">No seats</div>
+                <div class="sub">Nothing to measure yet</div>
+            }
+            else
+            {
+                <div class="kicker">@(State == PoolState.Exhausted ? "Pool used" : "of the pool used")</div>
+                <div class="big"><CountUp Value="@PercentValue" Text="@Fmt.Percent(Pool.PercentUsed)" Suffix="%" /></div>
+                <div class="sub num">@Fmt.Credits(Pool.Used) of @Fmt.Credits(Pool.Limit) credits</div>
+                @if (State == PoolState.Exhausted)
+                {
+                    <StatusBadge Class="state" Tone="StatusBadge.BadgeTone.Danger" Icon="octagon" Text="Pool exhausted" />
+                }
+                else if (State == PoolState.Warning)
+                {
+                    <StatusBadge Class="state" Tone="StatusBadge.BadgeTone.Warn" Text="Almost used up" />
+                }
+            }
+        </div>
+    </div>
+
+    <dl class="figures">
+        <div>
+            <dt>Used</dt>
+            <dd class="num">@Fmt.Credits(Pool.Used)</dd>
+        </div>
+        <div>
+            <dt>Remaining</dt>
+            <dd class="num @(State == PoolState.Exhausted ? "zero" : null)">@Fmt.Credits(Pool.Remaining)
+                @if (State == PoolState.Exhausted)
+                {
+                    <span class="note">none left</span>
+                }
+            </dd>
+        </div>
+    </dl>
+
+    @if (State == PoolState.Exhausted)
+    {
+        <p class="alert" role="status">
+            <Icon Name="alert" Size="16" />
+            <span>
+                <strong class="num">@Fmt.Credits(Pool.OverageCredits) credits over the pool</strong>,
+                about <strong class="num">@Fmt.Dollars(Pool.OverageDollars)</strong> of overage at $0.01 per credit.
+            </span>
+        </p>
+    }
+
+    @if (State != PoolState.NoPool && PacePercent is { } p)
+    {
+        <p class="pace-note"><span class="pace-key" aria-hidden="true"></span> Even pace for today: <span class="num">@Fmt.Percent(p)</span>
+            @if (Pool.PercentUsed is { } used)
+            {
+                <span class="faint"> · @(used > p + 0.5m ? "ahead of pace" : used < p - 0.5m ? "behind pace" : "on pace")</span>
+            }
+        </p>
+    }
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+    private const double Cx = 160, Cy = 150, R = 118;
+
+    [Parameter, EditorRequired] public PoolSummary Pool { get; set; } = default!;
+    /// <summary>Where an even burn of the pool would be today, as a percent of the limit (null to hide the marker).</summary>
+    [Parameter] public decimal? PacePercent { get; set; }
+
+    private PoolState State => GaugeGeometry.StateOf(Pool);
+    private string StateClass => State.ToString().ToLowerInvariant();
+    private string GradientId => State switch { PoolState.Exhausted => "gauge-grad-danger", PoolState.Warning => "gauge-grad-warn", _ => "gauge-grad-ok" };
+    private decimal PercentValue => Math.Floor(Pool.PercentUsed ?? 0m);
+
+    private string _trackPath = "";
+    private double _fraction;
+    private string _dash = "0";
+    private (double X, double Y) _paceA, _paceB, _endLeft, _endRight;
+
+    protected override void OnParametersSet()
+    {
+        _trackPath = GaugeGeometry.ArcPath(Cx, Cy, R, GaugeGeometry.StartDeg, GaugeGeometry.SweepDeg);
+        _fraction = GaugeGeometry.Fraction(Pool.Used, Pool.Limit);
+        _dash = (_fraction * 100).ToString("0.##", Inv);
+        _endLeft = GaugeGeometry.Point(Cx, Cy, R, GaugeGeometry.StartDeg);
+        _endRight = GaugeGeometry.Point(Cx, Cy, R, GaugeGeometry.StartDeg + GaugeGeometry.SweepDeg);
+        if (PacePercent is { } p)
+        {
+            var angle = GaugeGeometry.AngleAt((double)Math.Clamp(p / 100m, 0m, 1m));
+            _paceA = GaugeGeometry.Point(Cx, Cy, R - 17, angle);
+            _paceB = GaugeGeometry.Point(Cx, Cy, R + 17, angle);
+        }
+    }
+
+    private string AriaLabel => State == PoolState.NoPool
+        ? "No seats, so there is no pool"
+        : $"{Fmt.Percent(Pool.PercentUsed)} of the pool used: {Fmt.Credits(Pool.Used)} of {Fmt.Credits(Pool.Limit)} credits{(State == PoolState.Exhausted ? ". The pool is exhausted" : "")}";
+}

@@ -1,0 +1,14 @@
+@* A figure that counts up from zero on load (glass.js animates it; the final text is already in the page). *@
+<span data-countup data-to="@To" data-decimals="@Decimals" data-prefix="@Prefix" data-suffix="@Suffix">@Display</span>
+
+@code {
+    [Parameter, EditorRequired] public decimal Value { get; set; }
+    [Parameter] public int Decimals { get; set; }
+    [Parameter] public string Prefix { get; set; } = "";
+    [Parameter] public string Suffix { get; set; } = "";
+    /// <summary>Final text when it must differ from plain rounding (for example a truncated percentage).</summary>
+    [Parameter] public string? Text { get; set; }
+
+    private string To => Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    private string Display => Text ?? Prefix + Value.ToString("N" + Decimals, System.Globalization.CultureInfo.InvariantCulture) + Suffix;
+}

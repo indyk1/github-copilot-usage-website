@@ -1,0 +1,17 @@
+@* A frosted, translucent panel. Tone adds a coloured edge for warning or danger (always pair with a text label). *@
+<section class="glass @ToneClass @(Lift ? "lift" : null) @Class" @attributes="AdditionalAttributes">
+    @ChildContent
+</section>
+
+@code {
+    public enum CardTone { Neutral, Warn, Danger }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public CardTone Tone { get; set; } = CardTone.Neutral;
+    /// <summary>Gentle hover lift; use on tiles and rows, not on big panels.</summary>
+    [Parameter] public bool Lift { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string? ToneClass => Tone switch { CardTone.Warn => "tone-warn", CardTone.Danger => "tone-danger", _ => null };
+}

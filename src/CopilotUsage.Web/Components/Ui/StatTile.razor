@@ -1,0 +1,36 @@
+@* One headline figure: label, big value (a CountUp or plain text), and a hint line. *@
+<GlassCard Class="@("tile " + ToneClass + " " + Class)" Lift="true" Tone="@CardTone">
+    <div class="label">
+        @if (!string.IsNullOrEmpty(Icon))
+        {
+            <Icon Name="@Icon" Size="16" />
+        }
+        <span>@Label</span>
+    </div>
+    <div class="value">@Value</div>
+    @if (!string.IsNullOrEmpty(Status))
+    {
+        <div class="status"><StatusBadge Text="@Status" Tone="@BadgeTone" /></div>
+    }
+    @if (Hint is not null)
+    {
+        <div class="hint">@Hint</div>
+    }
+</GlassCard>
+
+@code {
+    public enum StatTone { Neutral, Good, Warn, Danger }
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public RenderFragment? Value { get; set; }
+    [Parameter] public RenderFragment? Hint { get; set; }
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public StatTone Tone { get; set; } = StatTone.Neutral;
+    /// <summary>Optional status word shown as a badge with an icon (used with Warn/Danger so the state is not colour-only).</summary>
+    [Parameter] public string? Status { get; set; }
+
+    private string ToneClass => Tone.ToString().ToLowerInvariant();
+    private GlassCard.CardTone CardTone => Tone switch { StatTone.Warn => GlassCard.CardTone.Warn, StatTone.Danger => GlassCard.CardTone.Danger, _ => GlassCard.CardTone.Neutral };
+    private StatusBadge.BadgeTone BadgeTone => Tone switch { StatTone.Danger => StatusBadge.BadgeTone.Danger, StatTone.Warn => StatusBadge.BadgeTone.Warn, StatTone.Good => StatusBadge.BadgeTone.Ok, _ => StatusBadge.BadgeTone.Info };
+}

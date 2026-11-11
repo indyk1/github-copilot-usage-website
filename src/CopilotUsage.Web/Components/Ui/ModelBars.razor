@@ -1,0 +1,46 @@
+@using CopilotUsage.Data.Queries
+@* Org-wide credits by model as ranked horizontal bars. Each row carries its name and numbers, so colour only decorates. *@
+@if (_rows.Count == 0)
+{
+    <p class="empty">No model usage recorded yet this month.</p>
+}
+else
+{
+    <ul class="models">
+        @for (var i = 0; i < _rows.Count; i++)
+        {
+            var r = _rows[i];
+            <li style="--c: var(--series-@(Math.Min(i + 1, 7)))">
+                <div class="top">
+                    <span class="name"><span class="swatch" aria-hidden="true"></span>@r.Name</span>
+                    <span class="figs num"><strong>@Fmt.Credits(r.Credits)</strong> <span class="pct">@Fmt.Percent(r.SharePercent, 1)</span></span>
+                </div>
+                <div class="bar" aria-hidden="true"><div class="fill" style="width: @Width(r)%"></div></div>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private sealed record Row(string Name, decimal Credits, decimal? SharePercent);
+
+    private const int MaxRows = 6;
+
+    [Parameter, EditorRequired] public IReadOnlyList<ModelShare> Models { get; set; } = [];
+
+    private List<Row> _rows = [];
+    private decimal _max;
+
+    protected override void OnParametersSet()
+    {
+        var ordered = Models.Where(m => m.Credits > 0m).OrderByDescending(m => m.Credits).ToList();
+        var rows = ordered.Take(MaxRows).Select(m => new Row(m.Model, m.Credits, m.SharePercent)).ToList();
+        var rest = ordered.Skip(MaxRows).ToList();
+        if (rest.Count > 0)
+            rows.Add(new Row($"Other ({rest.Count} models)", rest.Sum(m => m.Credits), rest.All(m => m.SharePercent is not null) ? rest.Sum(m => m.SharePercent) : null));
+        _rows = rows;
+        _max = rows.Count == 0 ? 0m : rows.Max(r => r.Credits);
+    }
+
+    private string Width(Row r) => (_max <= 0m ? 0m : r.Credits / _max * 100m).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+}

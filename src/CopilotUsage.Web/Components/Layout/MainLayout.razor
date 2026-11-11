@@ -1,9 +1,58 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@inject IOptions<DemoOptions> Demo
 
-@Body
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<div class="shell">
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a class="brand" href="/" aria-label="Copilot Usage, home">
+                <svg class="mark" viewBox="0 0 32 32" width="30" height="30" aria-hidden="true" focusable="false">
+                    <defs>
+                        <linearGradient id="mark-grad" x1="4" y1="28" x2="28" y2="4" gradientUnits="userSpaceOnUse">
+                            <stop offset="0" class="m-violet" /><stop offset="0.55" class="m-blue" /><stop offset="1" class="m-teal" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M6.2 24.5A12.5 12.5 0 1 1 25.8 24.5" fill="none" stroke="url(#mark-grad)" stroke-width="3.4" stroke-linecap="round" />
+                    <circle cx="16" cy="17" r="3" fill="url(#mark-grad)" />
+                </svg>
+                <span class="brand-name">Copilot Usage</span>
+            </a>
+
+            <nav aria-label="Primary">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Home</NavLink>
+                <NavLink class="nav-link" href="users">Users</NavLink>
+            </nav>
+
+            <div class="topbar-end">
+                @if (Demo.Value.Enabled)
+                {
+                    <StatusBadge Class="demo" Tone="StatusBadge.BadgeTone.Info" Icon="flask" Text="@DemoText"
+                                 title="Synthetic demo data. GitHub is not being contacted." />
+                }
+            </div>
+        </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+        @Body
+    </main>
+
+    <footer class="footer">
+        <p>AI credits: 1 credit = $0.01. The pool is shared across the organization and resets at 00:00 UTC on the 1st.</p>
+    </footer>
+</div>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    <button type="button" class="dismiss" aria-label="Dismiss">Dismiss</button>
 </div>
+
+@code {
+    private string DemoText =>
+        Demo.Value.Scenario is { Length: > 0 } s && !s.Equals("normal", StringComparison.OrdinalIgnoreCase)
+            ? $"Demo data · {s.ToLowerInvariant()}"
+            : "Demo data";
+}

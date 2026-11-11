@@ -1,0 +1,39 @@
+.glass {
+    position: relative;
+    min-width: 0;
+    padding: var(--s-5);
+    border-radius: var(--r-lg);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: var(--glass-highlight), var(--glow);
+    transition: transform var(--dur-med) var(--ease-out), box-shadow var(--dur-med) var(--ease-out), border-color var(--dur-med), background var(--dur-med);
+}
+
+/* A faint top-edge sheen, like light catching the glass */
+.glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 38%);
+}
+
+.lift:hover {
+    transform: translateY(var(--lift));
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-strong);
+    box-shadow: var(--glass-highlight), var(--glow-hover);
+}
+
+.tone-warn { border-color: rgba(251, 191, 71, 0.45); }
+.tone-danger {
+    border-color: rgba(251, 111, 138, 0.55);
+    box-shadow: var(--glass-highlight), var(--glow-danger);
+}
+
+@media (max-width: 480px) {
+    .glass { padding: var(--s-4); border-radius: var(--r-md); }
+}
