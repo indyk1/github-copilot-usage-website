@@ -22,7 +22,7 @@ public sealed class TestHost : IAsyncDisposable
     public FakeTimeProvider Time { get; }
     public FakeGitHubClient GitHub { get; }
 
-    public TestHost(DateTimeOffset now, bool demo = false, FakeGitHubClient? github = null)
+    public TestHost(DateTimeOffset now, bool demo = false, FakeGitHubClient? github = null, string scenario = "normal")
     {
         Time = new FakeTimeProvider(now);
         GitHub = github ?? new FakeGitHubClient();
@@ -34,7 +34,7 @@ public sealed class TestHost : IAsyncDisposable
         s.AddLogging(b => b.SetMinimumLevel(LogLevel.None));
         s.AddSingleton<TimeProvider>(Time);
         s.AddSingleton(Options.Create(new CopilotOptions()));
-        s.AddSingleton(Options.Create(new DemoOptions { Enabled = demo }));
+        s.AddSingleton(Options.Create(new DemoOptions { Enabled = demo, Scenario = scenario }));
         s.AddSingleton(Options.Create(new SyncOptions()));
         s.AddDbContext<CopilotUsageDbContext>(o => o.UseSqlite(_connection));
         s.AddScoped<UsageWriter>();

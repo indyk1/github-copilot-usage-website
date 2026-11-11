@@ -17,4 +17,7 @@ public sealed class DemoOptions
 
     /// <summary>When true GitHub is never called; the database is filled with deterministic demo data.</summary>
     public bool Enabled { get; set; }
+
+    /// <summary>Which demo dataset to show: normal (default), over (pool exhausted with overage) or empty (seats, no usage yet).</summary>
+    public string Scenario { get; set; } = "normal";
 }

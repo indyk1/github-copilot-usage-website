@@ -35,9 +35,11 @@ builder.Services.AddRazorComponents()
 var app = builder.Build();
 
 var demo = app.Configuration.GetSection(DemoOptions.SectionName).Get<DemoOptions>()?.Enabled == true;
-app.Logger.LogInformation(demo
-    ? "Demo mode: GitHub is not contacted; the database is filled with synthetic data."
-    : "Live mode: syncing from GitHub organization {Org}.", app.Configuration["GitHub:Org"]);
+if (demo)
+    app.Logger.LogInformation("Demo mode (scenario: {Scenario}): GitHub is not contacted; the database is filled with synthetic data.",
+        app.Configuration["Demo:Scenario"] ?? "normal");
+else
+    app.Logger.LogInformation("Live mode: syncing from GitHub organization {Org}.", app.Configuration["GitHub:Org"]);
 
 // Migrate, then (demo only) seed before serving so the first page view already has data.
 await using (var scope = app.Services.CreateAsyncScope())

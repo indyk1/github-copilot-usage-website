@@ -107,7 +107,8 @@ public sealed class SyncService(
     }
 
     private async Task<StepOutcome> DemoSeedAsync(IServiceProvider sp, CancellationToken ct) =>
-        new(await sp.GetRequiredService<DemoSeeder>().SeedAsync(ct), 0, null);
+        new(await sp.GetRequiredService<DemoSeeder>().SeedAsync(
+            DemoScenarios.TryParse(demo.Value.Scenario, out var scenario) ? scenario : DemoScenario.Normal, ct), 0, null);
 
     private async Task<StepOutcome> SeatsAsync(IServiceProvider sp, CancellationToken ct)
     {

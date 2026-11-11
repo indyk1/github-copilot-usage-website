@@ -33,6 +33,8 @@ public static class StartupConfigValidator
                 errors.Add("GitHub:Token is required when Demo:Enabled is false. Supply it from configuration only (user secrets, environment variable GitHub__Token, or a Key Vault reference), never from a file in the repo. To explore without GitHub set Demo:Enabled=true.");
         }
 
+        if (!CopilotUsage.Data.Demo.DemoScenarios.TryParse(demo.Scenario, out _))
+            errors.Add($"Demo:Scenario '{demo.Scenario}' is not recognised. Use one of: {CopilotUsage.Data.Demo.DemoScenarios.Allowed}.");
         if (copilot.CreditsPerSeat <= 0)
             errors.Add("Copilot:CreditsPerSeat must be greater than zero.");
         if (!(sync.IntervalHours > 0) || double.IsInfinity(sync.IntervalHours))

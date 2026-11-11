@@ -22,6 +22,9 @@ public sealed record DemoDataSet(
 /// </summary>
 public static class DemoDataGenerator
 {
+    /// <summary>Where the "over" scenario lands: this share of the pool, so it is clearly exhausted with a visible overage.</summary>
+    public const double OverScenarioPoolFraction = 1.12;
+
     private enum Kind { Heavy, Medium, Light, Inactive }
 
     private sealed record Persona(string Login, Kind Kind, double AgentAffinity, double CliAffinity, double ThirdPartyAffinity, string Ide, IReadOnlyList<string> Languages, string? Team);
@@ -56,7 +59,33 @@ public static class DemoDataGenerator
         ("olivia-grant", Kind.Inactive), ("pavel-novak", Kind.Inactive),
     ];
 
-    public static DemoDataSet Generate(DateTimeOffset now, decimal creditsPerSeat)
+    /// <summary>
+    /// <see cref="DemoScenario.Normal"/> is the base dataset (about half the pool used). <see cref="DemoScenario.Over"/>
+    /// scales this month's credits so the pool is at <see cref="OverScenarioPoolFraction"/> of its limit.
+    /// <see cref="DemoScenario.Empty"/> keeps the seats but records no usage this month.
+    /// </summary>
+    public static DemoDataSet Generate(DateTimeOffset now, decimal creditsPerSeat, DemoScenario scenario = DemoScenario.Normal)
+    {
+        switch (scenario)
+        {
+            case DemoScenario.Empty:
+                return Build(now, creditsPerSeat, 1.0, includeCurrentUsage: false);
+            case DemoScenario.Over:
+            {
+                var baseSet = Build(now, creditsPerSeat, 1.0, includeCurrentUsage: true);
+                var current = BillingMonth.Containing(now);
+                var used = baseSet.UserMonthly.Where(l => l.Month == current).Sum(l => l.Credits);
+                var limit = baseSet.Summary.TotalSeats * creditsPerSeat;
+                if (used <= 0m) return baseSet;
+                var scale = limit * (decimal)OverScenarioPoolFraction / used;
+                return Build(now, creditsPerSeat, (double)scale, includeCurrentUsage: true);
+            }
+            default:
+                return Build(now, creditsPerSeat, 1.0, includeCurrentUsage: true);
+        }
+    }
+
+    private static DemoDataSet Build(DateTimeOffset now, decimal creditsPerSeat, double currentScale, bool includeCurrentUsage)
     {
         var nowUtc = now.ToUniversalTime();
         var today = DateOnly.FromDateTime(nowUtc.UtcDateTime);
@@ -72,10 +101,12 @@ public static class DemoDataGenerator
         foreach (var month in months)
         {
             var isCurrent = month == current;
+            if (isCurrent && !includeCurrentUsage) continue;
             var lastDay = isCurrent ? today : month.LastDay;
             foreach (var p in personas.Where(p => p.Kind != Kind.Inactive))
             {
                 var target = TargetCredits(p, month, isCurrent, today, creditsPerSeat);
+                if (isCurrent) target = Math.Round(target * (decimal)currentScale, 2);
                 var perDay = DailyCredits(p, month, lastDay, today, target);
                 var modelWeights = UserModelWeights(p);
 

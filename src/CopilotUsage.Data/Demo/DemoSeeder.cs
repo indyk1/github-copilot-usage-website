@@ -1,16 +1,29 @@
 using CopilotUsage.Core.Calculations;
 using CopilotUsage.Core.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace CopilotUsage.Data.Demo;
 
-/// <summary>Writes the generated demo dataset through the same upsert path the real sync uses.</summary>
-public sealed class DemoSeeder(UsageWriter writer, TimeProvider time, Microsoft.Extensions.Options.IOptions<CopilotUsage.Core.CopilotOptions> options)
+/// <summary>
+/// Writes the generated demo dataset through the same upsert path the real sync uses. Demo databases hold only
+/// synthetic data, so the usage tables are cleared first: switching scenario (or a refresh) always yields exactly that scenario.
+/// </summary>
+public sealed class DemoSeeder(
+    CopilotUsageDbContext db,
+    UsageWriter writer,
+    TimeProvider time,
+    Microsoft.Extensions.Options.IOptions<CopilotUsage.Core.CopilotOptions> options)
 {
-    public async Task<int> SeedAsync(CancellationToken ct = default)
+    public async Task<int> SeedAsync(DemoScenario scenario = DemoScenario.Normal, CancellationToken ct = default)
     {
         var now = time.GetUtcNow();
-        var set = DemoDataGenerator.Generate(now, options.Value.CreditsPerSeat);
+        var set = DemoDataGenerator.Generate(now, options.Value.CreditsPerSeat, scenario);
         var rows = 0;
+
+        await db.UserMetricBreakdown.ExecuteDeleteAsync(ct);
+        await db.UserMetricDaily.ExecuteDeleteAsync(ct);
+        await db.UserModelMonthly.ExecuteDeleteAsync(ct);
+        await db.CreditUsageDaily.ExecuteDeleteAsync(ct);
 
         await writer.UpsertSeatSummaryAsync(set.Summary, now, ct);
         rows += await writer.UpsertSeatsAsync(set.Seats, now, ct);
