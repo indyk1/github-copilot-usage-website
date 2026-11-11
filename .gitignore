@@ -1,0 +1,29 @@
+# Build output
+bin/
+obj/
+publish/
+artifacts/
+*.user
+*.suo
+.vs/
+.idea/
+TestResults/
+*.log
+
+# SQLite databases (never commit data)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/
+
+# Secrets and local settings
+*.pfx
+.env
+.env.*
+secrets.json
+appsettings.Local.json
+appsettings.*.local.json
+**/appsettings.Production.json

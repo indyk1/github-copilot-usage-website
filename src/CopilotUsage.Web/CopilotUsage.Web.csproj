@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CopilotUsage.Core\CopilotUsage.Core.csproj" />
+    <ProjectReference Include="..\CopilotUsage.GitHub\CopilotUsage.GitHub.csproj" />
+    <ProjectReference Include="..\CopilotUsage.Data\CopilotUsage.Data.csproj" />
+  </ItemGroup>
+
+</Project>
