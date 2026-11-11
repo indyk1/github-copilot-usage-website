@@ -13,7 +13,7 @@ else
             var over = r.OverFairShare;
             <li>
                 <a class="row @(over ? "over" : null) @(r.Credits <= 0m ? "idle" : null)" href="/users/@Uri.EscapeDataString(r.Login)">
-                    <span class="rank num" aria-label="Rank @r.Rank">@r.Rank</span>
+                    <span class="rank num" aria-label="@(r.Credits > 0m ? "Rank " + r.Rank : "Unranked, no credits used")">@(r.Credits > 0m ? r.Rank.ToString() : "–")</span>
                     <span class="who"><Avatar Login="@r.Login" Url="@r.AvatarUrl" Size="34" /><span class="login">@r.Login</span></span>
                     <span class="credits num"><strong>@Fmt.Credits(r.Credits)</strong><span class="unit"> credits</span></span>
                     <span class="share num" title="Share of the whole pool">@Fmt.Percent(r.ShareOfPoolPercent, 1)<span class="unit"> of pool</span></span>
@@ -23,8 +23,7 @@ else
                         <span class="fair-text num">
                             @if (over)
                             {
-                                <span class="over-flag"><Icon Name="arrow-up" Size="12" /> Over fair share</span>
-                                <span> · @Fmt.Percent(r.FairSharePercent)</span>
+                                <span class="over-flag"><Icon Name="arrow-up" Size="12" /> Over fair share <span>@Fmt.Percent(r.FairSharePercent)</span></span>
                             }
                             else
                             {

@@ -4,8 +4,8 @@ A .NET 10 Blazor dashboard showing how a GitHub organization consumes its monthl
 (Copilot Business: 1,900 credits per seat, pooled across the org, 1 credit = $0.01, reset 00:00 UTC on the 1st).
 See [PLAN.md](PLAN.md) for the full spec. A background job syncs GitHub data into SQLite; pages read only from SQLite.
 
-**Status: phase 1 (foundation).** Solution, calculations, GitHub client, database, sync job, demo data and tests are
-done. The home page is a placeholder; the real pages and theme come in the next phases.
+**Status: phase 2 (theme and home page).** Foundation (calculations, GitHub client, database, sync, demo data) plus the
+"glass and aurora" theme and the home page are done. The Users pages are "coming soon" stubs.
 
 ## Run it in demo mode (no GitHub needed)
 
@@ -36,6 +36,7 @@ read [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md) before pointing this at 
 | Key | Default | Meaning |
 |---|---|---|
 | `Demo:Enabled` | `false` (`true` in Development) | Skip GitHub, seed demo data |
+| `Demo:Scenario` | `normal` | Demo dataset: `normal` (about half the pool), `over` (pool exhausted with overage), `empty` (seats, no usage yet) |
 | `GitHub:Org` | none | Organization login (required unless demo) |
 | `GitHub:Token` | none | Access token, configuration only (required unless demo) |
 | `GitHub:BaseUrl` | `https://api.github.com/` | API base URL |

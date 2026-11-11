@@ -42,7 +42,7 @@ h1 { margin-top: var(--s-1); font-size: var(--fs-2xl); letter-spacing: -0.025em;
 .hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--s-5); align-items: stretch; }
 .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-4); align-content: stretch; }
 .tiles ::deep .wide { grid-column: 1 / -1; }
-.unit { margin-left: 0.35em; color: var(--ink-1); font-size: var(--fs-md); font-weight: 600; letter-spacing: 0; }
+.unit { white-space: nowrap; margin-left: 0.35em; color: var(--ink-1); font-size: var(--fs-md); font-weight: 600; letter-spacing: 0; }
 
 .lower { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--s-5); align-items: start; }
 
@@ -72,4 +72,5 @@ h1 { margin-top: var(--s-1); font-size: var(--fs-2xl); letter-spacing: -0.025em;
     .freshness { justify-content: flex-start; }
     .sync-status { text-align: left; }
     .tiles { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-3); }
+    .tiles ::deep .wide { grid-column: 1 / -1; }
 }

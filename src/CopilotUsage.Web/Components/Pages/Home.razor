@@ -242,7 +242,7 @@
         try
         {
             // Not tied to this page's lifetime: a sync that has begun should finish even if the user navigates away.
-            var result = await Sync.RunAsync(SyncTrigger.Manual);
+            var result = await Task.Run(() => Sync.RunAsync(SyncTrigger.Manual));
             if (result.Skipped)
                 while (Sync.IsRunning && !_disposed) await Task.Delay(500);
 
