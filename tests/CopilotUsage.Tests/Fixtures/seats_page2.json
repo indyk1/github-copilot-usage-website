@@ -1,0 +1,12 @@
+{
+  "total_seats": 3,
+  "seats": [
+    {
+      "created_at": "2026-11-01T08:00:00Z",
+      "updated_at": "2026-11-01T08:00:00Z",
+      "last_activity_at": "2026-11-09T09:00:00Z",
+      "plan_type": "business",
+      "assignee": { "login": "octo-carol", "id": 1003 }
+    }
+  ]
+}

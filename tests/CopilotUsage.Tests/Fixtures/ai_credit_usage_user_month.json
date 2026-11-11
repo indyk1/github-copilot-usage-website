@@ -1,0 +1,10 @@
+{
+  "timePeriod": { "year": 2026, "month": 11 },
+  "organization": "acme",
+  "user": "octo-alice",
+  "usageItems": [
+    { "product": "Copilot", "model": "Claude Opus 4.5", "grossQuantity": 1200, "grossAmount": 12.0 },
+    { "product": "Copilot", "model": "GPT-5 mini", "grossAmount": 2.5 },
+    { "product": "Copilot", "sku": "ai_credits_unknown_model", "grossQuantity": 10 }
+  ]
+}

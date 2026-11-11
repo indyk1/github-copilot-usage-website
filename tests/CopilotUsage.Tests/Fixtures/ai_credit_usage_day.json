@@ -1,0 +1,39 @@
+{
+  "timePeriod": { "year": 2026, "month": 11, "day": 9 },
+  "organization": "acme",
+  "usageItems": [
+    {
+      "product": "Copilot",
+      "sku": "ai_credits",
+      "model": "Claude Sonnet 4.5",
+      "unitType": "ai-credits",
+      "pricePerUnit": 0.01,
+      "grossQuantity": 812.5,
+      "grossAmount": 8.125,
+      "discountQuantity": 812.5,
+      "discountAmount": 8.125,
+      "netQuantity": 0,
+      "netAmount": 0
+    },
+    {
+      "product": "Copilot",
+      "sku": "ai_credits",
+      "model": "GPT-5.2",
+      "unitType": "ai-credits",
+      "pricePerUnit": 0.01,
+      "grossQuantity": 300,
+      "grossAmount": 3.0,
+      "discountQuantity": 300,
+      "discountAmount": 3.0,
+      "netQuantity": 0,
+      "netAmount": 0
+    },
+    {
+      "product": "Copilot",
+      "sku": "ai_credits",
+      "model": "GPT-5.2",
+      "grossQuantity": 50,
+      "grossAmount": 0.5
+    }
+  ]
+}

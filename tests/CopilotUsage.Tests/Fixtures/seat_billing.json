@@ -1,0 +1,14 @@
+{
+  "seat_breakdown": {
+    "total": 25,
+    "added_this_cycle": 2,
+    "pending_cancellation": 1,
+    "pending_invitation": 3,
+    "active_this_cycle": 20,
+    "inactive_this_cycle": 5
+  },
+  "seat_management_setting": "assign_selected",
+  "ide_chat": "enabled",
+  "plan_type": "business",
+  "some_future_field": { "nested": [1, 2, 3] }
+}

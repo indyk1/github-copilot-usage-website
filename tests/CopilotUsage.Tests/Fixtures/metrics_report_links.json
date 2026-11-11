@@ -1,0 +1,9 @@
+{
+  "download_links": [
+    "https://reports.example.test/signed/users-28-day-part-1.ndjson?sig=abc",
+    "https://reports.example.test/signed/users-28-day-part-2.ndjson?sig=def",
+    "http://insecure.example.test/ignored.ndjson"
+  ],
+  "report_start_day": "2026-10-14",
+  "report_end_day": "2026-11-10"
+}

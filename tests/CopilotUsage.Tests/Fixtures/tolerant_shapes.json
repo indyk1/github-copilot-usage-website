@@ -1,0 +1,9 @@
+{
+  "total_seats": "not a number",
+  "seats": { "this": "should have been an array" },
+  "usageItems": [
+    { "model": 42, "grossQuantity": { "unexpected": true }, "grossAmount": "7.5" },
+    "stray string"
+  ],
+  "download_links": "nope"
+}
