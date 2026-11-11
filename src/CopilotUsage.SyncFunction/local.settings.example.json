@@ -1,0 +1,15 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "SyncSchedule": "0 0 */4 * * *",
+    "SyncApi__BaseUrl": "https://YOUR-WEB-APP.azurewebsites.net/",
+    "SyncApi__Scope": "api://00000000-0000-0000-0000-000000000000/.default",
+    "SyncApi__ManagedIdentityClientId": "",
+    "SyncApi__TimeoutSeconds": "230",
+    "SyncApi__MaxAttempts": "3",
+    "SyncApi__InitialBackoffSeconds": "15",
+    "SyncApi__TotalBudgetSeconds": "540"
+  }
+}

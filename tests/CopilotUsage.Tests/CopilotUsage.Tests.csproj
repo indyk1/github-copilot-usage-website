@@ -20,6 +20,7 @@
     <ProjectReference Include="..\..\src\CopilotUsage.GitHub\CopilotUsage.GitHub.csproj" />
     <ProjectReference Include="..\..\src\CopilotUsage.Data\CopilotUsage.Data.csproj" />
     <ProjectReference Include="..\..\src\CopilotUsage.Web\CopilotUsage.Web.csproj" />
+    <ProjectReference Include="..\..\src\CopilotUsage.SyncFunction\CopilotUsage.SyncFunction.csproj" />
   </ItemGroup>
 
   <ItemGroup>

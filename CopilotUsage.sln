@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CopilotUsage.Tests", "tests\CopilotUsage.Tests\CopilotUsage.Tests.csproj", "{64DBA3AB-8EA5-404F-9595-11BEE705FF0B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CopilotUsage.SyncFunction", "src\CopilotUsage.SyncFunction\CopilotUsage.SyncFunction.csproj", "{C632B411-D562-42B6-88C2-501EA9568D22}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -87,6 +89,18 @@ Global
 		{64DBA3AB-8EA5-404F-9595-11BEE705FF0B}.Release|x64.Build.0 = Release|Any CPU
 		{64DBA3AB-8EA5-404F-9595-11BEE705FF0B}.Release|x86.ActiveCfg = Release|Any CPU
 		{64DBA3AB-8EA5-404F-9595-11BEE705FF0B}.Release|x86.Build.0 = Release|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Debug|x64.Build.0 = Debug|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Debug|x86.Build.0 = Debug|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Release|x64.ActiveCfg = Release|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Release|x64.Build.0 = Release|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Release|x86.ActiveCfg = Release|Any CPU
+		{C632B411-D562-42B6-88C2-501EA9568D22}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -97,5 +111,6 @@ Global
 		{D0664C3A-B383-42D9-BB19-CCAAB051CD0B} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{7346B5A8-DED2-430B-9481-E1B7DBCF001B} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{64DBA3AB-8EA5-404F-9595-11BEE705FF0B} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{C632B411-D562-42B6-88C2-501EA9568D22} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
