@@ -1,0 +1,45 @@
+@page "/"
+@using CopilotUsage.Data.Queries
+@inject UsageQueries Queries
+
+<PageTitle>Copilot Usage</PageTitle>
+
+<main style="font-family: system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem;">
+    <h1>Copilot Usage Dashboard</h1>
+    <p><strong>Placeholder page.</strong> The foundation (data, sync, queries) is running; the real UI is built in the next phase.</p>
+
+    @if (_summary is null)
+    {
+        <p>Loading...</p>
+    }
+    else
+    {
+        <h2>@_summary.Month</h2>
+        <ul>
+            <li id="mode">Mode: @(_summary.LastSync?.IsDemo == true ? "DEMO (synthetic data)" : "live")</li>
+            <li id="pool">Pool: @_summary.Pool.Used.ToString("N0") of @_summary.Pool.Limit.ToString("N0") credits (@_summary.Pool.Seats seats x @_summary.Pool.CreditsPerSeat.ToString("N0"))</li>
+            <li id="remaining">Remaining: @_summary.Pool.Remaining.ToString("N0") credits; overage $@_summary.Pool.OverageDollars.ToString("N2")</li>
+            <li id="reset">Days until reset: @_summary.DaysUntilReset</li>
+            <li id="asof">Data as of: @(_summary.DataAsOf?.ToString("u") ?? "never synced")</li>
+        </ul>
+
+        <h2>Top users</h2>
+        <ol>
+            @foreach (var row in _top)
+            {
+                <li>@row.Login: @row.Credits.ToString("N0") credits (@(row.FairSharePercent?.ToString("N0") ?? "-")% of fair share)</li>
+            }
+        </ol>
+    }
+</main>
+
+@code {
+    private HomeSummary? _summary;
+    private IReadOnlyList<LeaderboardRow> _top = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _summary = await Queries.GetHomeSummaryAsync();
+        _top = (await Queries.GetLeaderboardAsync()).Take(5).ToList();
+    }
+}
