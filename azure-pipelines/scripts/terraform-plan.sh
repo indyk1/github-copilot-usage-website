@@ -27,6 +27,7 @@ add_optional sync_interval_hours          TF_SYNC_INTERVAL_HOURS
 add_optional web_sku                      TF_WEB_SKU
 add_optional web_public_base_url          TF_WEB_PUBLIC_BASE_URL
 add_optional enable_monitoring            TF_ENABLE_MONITORING
+add_optional disable_basic_auth_publishing TF_DISABLE_BASIC_AUTH_PUBLISHING
 if [ -n "${TF_KEY_VAULT_SECRETS_OFFICER_OBJECT_IDS:-}" ]; then
   ids="$(echo "$TF_KEY_VAULT_SECRETS_OFFICER_OBJECT_IDS" | tr -d ' ' | sed 's/,/","/g')"
   args+=(-var "key_vault_secrets_officer_object_ids=[\"${ids}\"]")

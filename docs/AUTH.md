@@ -1,7 +1,9 @@
 # Microsoft Entra ID: what the app expects
 
 This is the contract between the code and the Entra tenant. The app registration is created by hand by the tenant's IT admin; nothing
-here is created by the application. Replace `<tenant-id>`, `<client-id>` and so on with the real values.
+here is created by the application, and Terraform does not create or read Entra objects either (it receives the ids below as variables). Replace
+`<tenant-id>`, `<client-id>` and so on with the real values. The order in which things are done (registration first, redirect URIs after the
+infrastructure exists, role assignment before the Function's first run) is in [DEPLOY.md](DEPLOY.md), steps 4 and 5; this file is the reference for the settings themselves.
 
 ## How it fits together
 
@@ -17,7 +19,7 @@ here is created by the application. Replace `<tenant-id>`, `<client-id>` and so 
 |---|---|
 | Supported account types | **Accounts in this organizational directory only (single tenant)** |
 | Platform | **Web** |
-| Redirect URI | `https://<public-host>/signin-oidc` (one per host the site is reached on; must be https) |
+| Redirect URI | `https://<public-host>/signin-oidc` (one per host the site is reached on; must be https). Terraform prints both URIs as the output `entra_redirect_uris`; register them after the infrastructure exists (DEPLOY.md, step 5.3) |
 | Redirect URI (sign-out) | `https://<public-host>/signout-callback-oidc` (add it as a second Web redirect URI) |
 | Front-channel logout URL | leave empty (the site sends `frame-ancestors 'none'`, so Entra's logout iframe could not load) |
 | Implicit grant and hybrid flows | tick **ID tokens (used for implicit and hybrid flows)**. Leave **Access tokens** unticked |
@@ -59,7 +61,9 @@ Manifest form:
 
 ## 2. Granting the role to the Function's managed identity
 
-The Function app must have a managed identity (system-assigned is simplest). Its **object (principal) ID** is what the web app pins to.
+The Function app runs as a **user-assigned managed identity** that Terraform creates first (so the web app can be given its ids without a dependency cycle). Its
+**object (principal) ID** is what the web app pins to; Terraform prints it as `function_identity_object_id` and `function_identity_client_id`.
+(A system-assigned identity works with the code too: leave `SyncApi__ManagedIdentityClientId` empty.)
 The role is assigned to that identity on the web app registration's **enterprise application** (service principal), not on the
 registration itself. Portal: Enterprise applications, the web app, Users and groups, cannot assign an app role to a managed identity,
 so use PowerShell or the CLI (a Cloud Application Administrator or Application Administrator role, plus consent rights, is required):
@@ -73,11 +77,12 @@ New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $mi.Id `
     -PrincipalId $mi.Id -ResourceId $api.Id -AppRoleId $role.Id
 ```
 
-Assign it to nothing and nobody else. (Azure CLI equivalent: `az rest --method POST --uri https://graph.microsoft.com/v1.0/servicePrincipals/<mi-object-id>/appRoleAssignments --body '{"principalId":"<mi-object-id>","resourceId":"<api-service-principal-object-id>","appRoleId":"<role-id>"}'`.)
+Assign it to nothing and nobody else. The Azure CLI version of the same assignment, with the Terraform outputs filled in, is in DEPLOY.md, step 5.6.
 
 ## 3. Configuration: web app
 
-App Settings (environment variables use `__` for `:`). None of these is a secret.
+App Settings (environment variables use `__` for `:`). None of these is a secret. In the deployed system **Terraform (`infra/web.tf`) sets them**
+from variables and outputs; a test (`InfraSettingsTests`) checks that every key it writes is one the code binds. This table is the reference for what each one means.
 
 | Key | Value | Required |
 |---|---|---|
@@ -116,7 +121,8 @@ Backing them up is optional: if they are lost, everyone simply signs in again. I
 
 ## 4. Configuration: Azure Function
 
-App Settings on the Function app:
+App Settings on the Function app. In the deployed system **Terraform (`infra/function.tf`) sets them**; on Flex Consumption `AzureWebJobsStorage` is replaced by the
+identity-based `AzureWebJobsStorage__accountName` / `__credential` / `__clientId`, and `FUNCTIONS_WORKER_RUNTIME` is not set (the plan's runtime setting carries it):
 
 | Key | Value |
 |---|---|

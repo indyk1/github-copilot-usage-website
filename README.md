@@ -2,16 +2,34 @@
 
 A .NET 10 Blazor dashboard showing how a GitHub organization consumes its monthly Copilot AI-credit allowance
 (Copilot Business: 1,900 credits per seat, pooled across the org, 1 credit = $0.01, reset 00:00 UTC on the 1st).
-See [PLAN.md](PLAN.md) for the full spec. A background job syncs GitHub data into SQLite; pages read only from SQLite.
+See [PLAN.md](PLAN.md) for the full spec. A sync, started by an Azure Function on a timer, copies GitHub data into SQLite; pages read only from SQLite.
 
-**Status: phase 4 (shippable).** Foundation (calculations, GitHub client, database, sync, demo data), the "glass and aurora"
-theme, the home page, the Users table (`/users`), the per-user drill-down (`/users/{login}`), a health endpoint, production
-configuration, security headers, Azure infrastructure as code (`infra/`), CI and a manual deploy workflow (`.github/workflows/`)
-are in place. Nothing has been deployed to Azure or run against the real GitHub API yet: read
-[docs/DEPLOY.md](docs/DEPLOY.md) (it ends with a first-run checklist) and [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md).
-The hosting design has changed (App Service Free plan, sync scheduled by an Azure Function, Microsoft Entra ID sign-in); this phase covers the
-application code. `infra/`, `.github/workflows/` and `docs/DEPLOY.md` still describe the old design and are replaced in the next phase.
-The dashboard now requires Entra sign-in (see [docs/AUTH.md](docs/AUTH.md)); only Development may switch it off.
+**Status: shippable, not yet deployed.** The application (calculations, GitHub client, database, sync, demo data, the "glass and aurora" theme,
+the home page, `/users`, the per-user drill-down, `/healthz`, security headers), Microsoft Entra ID sign-in, the `POST /api/sync` endpoint, the Azure Function that
+schedules the sync, the Terraform in `infra/` and the Azure DevOps pipelines in `azure-pipelines/` are all written and tested as far as is possible without
+Azure. Nothing has been deployed to Azure or run against the real GitHub API yet: read [docs/DEPLOY.md](docs/DEPLOY.md) (a numbered runbook that ends with a
+first-run checklist) and [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md). Sign-in is required everywhere except Development
+(see [docs/AUTH.md](docs/AUTH.md)).
+
+## Architecture
+
+```
+ people ──Entra ID sign-in──▶ Web app: Blazor Server on App Service Free (F1, Linux, .NET 10)
+                               │   pages read only from SQLite (/home/data), GitHub token from Key Vault
+                               ▲
+ Azure Function (Flex Consumption, timer every 4 h) ──POST /api/sync, token of its managed identity (role Sync.Run)
+                               │
+                               ▼  the web app, not the Function, calls GitHub and writes the database
+```
+
+- **Hosting**: Terraform ([infra/](infra)) builds a resource group's contents; Azure DevOps Pipelines ([azure-pipelines/](azure-pipelines)) run CI, Terraform
+  (plan, then an approved apply) and the deployment of both apps. The code stays in this GitHub repository.
+- **Protection**: Microsoft Entra ID sign-in. There are no IP restrictions; network-level control is the IT admin's Entra Conditional Access policy with
+  Global Secure Access (runbook step 7).
+- **Scheduling**: the Function. The Free plan puts the web app to sleep when idle, so the app does not schedule its own syncs.
+
+**Cost target: zero.** F1 web app, Function on Flex Consumption inside its free grant, SQLite on the app's disk (no Azure SQL), logging inside the free
+allowance with a daily cap, Key Vault at cents. Details, caveats and what would start to charge: [the cost table in docs/DEPLOY.md](docs/DEPLOY.md#expected-monthly-cost).
 
 ## Pages
 
@@ -63,8 +81,8 @@ read [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md) before pointing this at 
 | `GitHub:BaseUrl` | `https://api.github.com/` | API base URL |
 | `GitHub:ApiVersion` | `2026-03-10` | Sent as `X-GitHub-Api-Version` |
 | `Copilot:CreditsPerSeat` | `1900` | Credits per seat per month |
-| `Sync:IntervalHours` | `4` | How often a sync is expected (match the Function's schedule). `/healthz` reports "degraded" after three missed intervals. With `Sync:InAppTimer` it is also the timer period |
-| `Sync:InAppTimer` | `false` | Run the in-process timer. Off everywhere by default: in production the Azure Function calls `POST /api/sync`. Switch on for local live runs |
+| `Sync:IntervalHours` | `4` | How often a sync is expected (Terraform sets it and the Function's schedule from one variable). `/healthz` reports "degraded" after three missed intervals. With `Sync:InAppTimer` it is also the timer period |
+| `Sync:InAppTimer` | `false` | Run the in-process timer. For **local live runs only**: in Azure the app is never scheduled this way (the Function calls `POST /api/sync`) and the setting is not set |
 | `Sync:RunOnStartup` | `true` | With `Sync:InAppTimer` only: sync at startup (live mode) |
 | `Sync:RequestWaitSeconds` | `200` | How long `POST /api/sync` waits for the sync before answering 202 and letting it finish in the background (1 to 220) |
 | `Sync:AllowedCallerObjectId` | none | Object id of the Function's managed identity, the only caller of `/api/sync`. **Required** when sign-in is on (always, outside Development) |
@@ -104,7 +122,7 @@ Demo seeding replaces whatever usage data it finds, so the app checks first, usi
   issuer (this tenant), audience, lifetime, the `Sync.Run` app role, an app-only token, and `oid` equal to `Sync:AllowedCallerObjectId`.
   Cookie users and delegated user tokens cannot call it; bearer tokens do not open pages. Refusals are a bare 401/403, the reason is logged.
   Answers: 200 with a small JSON summary, 202 if the sync outlasts the request budget (it carries on in the app), 409 if one is already running.
-- **Scheduler**: the Function in `src/CopilotUsage.SyncFunction` (timer, default every 4 hours). A run interrupted by the app stopping is
+- **Scheduler**: the Function in `src/CopilotUsage.SyncFunction` (timer, every 4 hours by default). A run interrupted by the app stopping is
   closed as failed at the next start and shows in `/healthz`.
 - Everything the Entra side needs is in [docs/AUTH.md](docs/AUTH.md).
 
@@ -123,25 +141,31 @@ treats "already running" as success and reports 401/403 as a configuration error
   `Permissions-Policy` and a Content-Security-Policy (same-origin scripts plus one per-request nonce for the framework's import
   map, same-origin websocket, GitHub avatar images, `frame-ancestors 'none'`). Inline event handlers are not allowed, so avatar
   fallbacks live in `wwwroot/js/glass.js`.
-- The footer shows the version and commit (`Version 1.0.0 (abc1234)`); the deploy workflow passes the commit as
+- The footer shows the version and commit (`Version 1.0.0 (abc1234)`); the deploy pipeline passes the commit as
   `SourceRevisionId`.
 - Logs never contain the token or an Authorization header (`LoggingSafetyTests` checks the real HttpClient pipeline at Trace level).
 
-## Azure and CI
+## Azure and pipelines
 
 | Path | What |
 |---|---|
-| `infra/main.bicep` | Linux App Service plan and web app (.NET 10, one instance, Always On, HTTPS only, TLS 1.2, websockets), Key Vault with the token, managed identity access, App Settings, **required** IP access restrictions on the site and the SCM site |
-| `infra/main.parameters.example.json` | Placeholder parameters; the token is passed on the command line, never in a file |
-| `.github/workflows/ci.yml` | Restore, build with warnings as errors, test, on pull requests and pushes to `main` |
-| `.github/workflows/deploy.yml` | Manual only; build, test, publish, deploy with OIDC (no stored secret); app name and resource group from repository variables |
-| `docs/DEPLOY.md` | Step-by-step runbook, first-run checklist and operating notes |
+| `infra/` | Terraform (azurerm, one root module): Linux App Service plan **F1** and the .NET 10 web app, Flex Consumption plan and Function with its storage and a user-assigned identity, Key Vault (standard, RBAC) for the GitHub token, optional Log Analytics and Application Insights with a daily cap. App Settings for both apps, outputs for the manual steps. State in a hand-made storage account (Entra auth). No Entra objects, no secrets. `terraform test` (offline) checks the setting keys |
+| `infra/terraform.tfvars.example` | Placeholder values only. Real values live in an Azure DevOps variable group |
+| `azure-pipelines/ci.yml` | Pull requests and `main`: restore, build with warnings as errors, test, publish results; Terraform format and validate |
+| `azure-pipelines/infrastructure.yml` | Manual (and on `infra/` changes on `main`): fmt, init, validate, plan; then an Apply stage gated by an Azure DevOps environment approval that applies exactly the saved plan |
+| `azure-pipelines/deploy.yml` | Manual, on `main`: build, test, publish and deploy the web app and the Function, smoke-check `/healthz` for the deployed commit |
+| `docs/DEPLOY.md` | Numbered runbook (manual and pipeline steps), cost table, first-run checklist, operating notes, Conditional Access and Global Secure Access |
+| `docs/AUTH.md` | What the app expects from Microsoft Entra ID and every configuration key |
+
+Pipelines authenticate to Azure with a workload-identity-federation service connection (no secret) and use only built-in tasks and scripts.
+The GitHub token is set by hand in Key Vault and is never in the repository, Terraform, the state or a pipeline variable.
 
 ## Build and test
 
 ```bash
 dotnet build
 dotnet test
+terraform -chdir=infra init -backend=false && terraform -chdir=infra validate && terraform -chdir=infra test   # optional: the infrastructure checks, offline
 ```
 
 ## Layout
@@ -154,8 +178,8 @@ src/CopilotUsage.Web     Blazor Server host: pages (Home, Users, UserDetail, Sig
                          config validation, Entra sign-in and sync-endpoint authorization (Auth/), sync service, endpoint and optional
                          worker, health endpoint, security headers
 src/CopilotUsage.SyncFunction  Azure Function (timer) that calls POST /api/sync
-infra                    Bicep template and example parameters
-.github/workflows        ci.yml and deploy.yml
-docs                     AUTH.md (Entra settings), DEPLOY.md (runbook, outdated), API-ASSUMPTIONS.md
+infra                    Terraform (root module), example variables, offline tests
+azure-pipelines          ci.yml, infrastructure.yml, deploy.yml and their templates and scripts
+docs                     AUTH.md (Entra settings), DEPLOY.md (runbook), API-ASSUMPTIONS.md
 tests/CopilotUsage.Tests xUnit and bUnit tests (fixtures are synthetic)
 ```

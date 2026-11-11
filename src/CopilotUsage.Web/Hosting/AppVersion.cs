@@ -3,8 +3,8 @@ using System.Reflection;
 namespace CopilotUsage.Web;
 
 /// <summary>
-/// The version and, when the build recorded it, the short commit hash. The deploy workflow passes
-/// <c>-p:SourceRevisionId=$GITHUB_SHA</c>, which the SDK appends to the informational version as <c>+sha</c>.
+/// The version and, when the build recorded it, the short commit hash. The deploy pipeline passes
+/// <c>-p:SourceRevisionId=$(Build.SourceVersion)</c>, which the SDK appends to the informational version as <c>+sha</c>.
 /// </summary>
 public static class AppVersion
 {

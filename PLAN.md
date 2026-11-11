@@ -11,11 +11,14 @@ Copilot allowance, who is consuming it, and what each person is doing with it.
 | Plan | Copilot Business |
 | Limit model | Org pool, plus a notional per-user "fair share" |
 | Stack | Blazor Web App (.NET 10, Interactive Server) |
-| Data | Background sync job into SQLite (EF Core) |
-| Access | No login in the app; network-restricted |
+| Data | Sync into SQLite (EF Core), triggered by `POST /api/sync` |
+| Scheduler | An Azure Function (Flex Consumption, timer, every 4 hours) calls the sync endpoint with its managed identity. No in-app timer in production: the Free plan sleeps the web app when idle |
+| Access | Microsoft Entra ID sign-in (single tenant, ID-token flow, no secret). No IP restrictions: network-level control is an Entra Conditional Access policy with Global Secure Access, owned by the IT admin |
 | User drill-down | Credits and cost, model breakdown, feature and tool mix, productivity signals |
 | Design | Glass and aurora (dark, frosted cards, soft gradient light) |
-| Hosting | Azure App Service |
+| Hosting | Azure App Service **Free (F1)**, Linux, .NET 10; SQLite on the persistent `/home/data` disk (no Azure SQL); cheapest option for every resource, target cost zero |
+| Infrastructure | Terraform (azurerm, single root module), state in a hand-made storage account. Entra objects are created by hand (no directory permissions needed) |
+| CI/CD | Azure DevOps Pipelines reading this GitHub repository: CI, infrastructure (plan, approved apply) and deploy. No GitHub Actions |
 | Extras | None (no alerts, team views, seat hygiene or export in v1) |
 
 ## 2. How Copilot billing works now
@@ -163,7 +166,8 @@ CopilotUsage.sln
 - **GitHub client** — typed `HttpClient` with resilience (retry, rate-limit
   backoff). Octokit does not cover these endpoints, so DTOs are hand-written and
   tolerant of unknown fields.
-- **Sync job** — a `BackgroundService` running every few hours:
+- **Sync** — a service the web app runs when `POST /api/sync` is called (by the Azure Function, every few hours; callable only by its managed identity), and when
+  a signed-in user presses Refresh. An in-process timer exists but is off outside local runs:
   1. seats and seat summary
   2. org credit usage for the current month, by day
   3. credit usage per user per model
@@ -175,7 +179,9 @@ CopilotUsage.sln
 - **UI** — Blazor Interactive Server, so the GitHub token stays on the server.
   Charts with Blazor-ApexCharts. Pages read only from SQLite, never from GitHub.
 - **Config** — `GitHub:Org`, `GitHub:Token`, `Copilot:CreditsPerSeat` (1900),
-  `Sync:IntervalHours`.
+  `Sync:IntervalHours`, `AzureAd:*`, `Sync:AllowedCallerObjectId` (see docs/AUTH.md).
+- **Azure Function** — `src/CopilotUsage.SyncFunction`: a timer that gets a token from its managed identity and calls the sync endpoint. It holds no secret
+  and never touches the database or GitHub.
 
 ## 6. Design: glass and aurora
 
@@ -189,18 +195,22 @@ CopilotUsage.sln
   states remain readable.
 - Design tokens as CSS variables in one theme file; responsive down to phone width.
 
-## 7. Hosting on Azure App Service
+## 7. Hosting on Azure
 
-- Linux App Service, .NET 10, **single instance, Always On** (the sync job needs
-  the process to stay alive; SQLite needs one writer).
-- SQLite file under `/home/data` (persistent). That storage is a network share, so
-  use the default journal mode rather than WAL.
-- GitHub token in Key Vault, referenced from App Settings.
-- **Access:** the app has no login, and an App Service is public by default. Lock
-  it down with access restrictions (office or VPN IP ranges) or a private endpoint.
-  If that proves awkward, App Service's built-in Entra ID sign-in adds a login
-  with no code change.
-- Deploy with GitHub Actions: build, test, publish.
+Details, cost and the order of operations are in docs/DEPLOY.md; the Entra contract is in docs/AUTH.md.
+
+- **Web app**: Linux App Service on the **Free (F1)** plan, .NET 10, a single instance (SQLite needs one writer). F1 has no Always On, so the app sleeps when idle
+  and cold-starts; it has a daily CPU quota and a small WebSocket limit (documented in DEPLOY.md). Moving up is one Terraform variable (`web_sku`), which also
+  turns on Always On and the `/healthz` health check.
+- **Data**: SQLite file under `/home/data` (persistent). That storage is a network share, so use the default journal mode rather than WAL.
+- **Sync**: an Azure Function on the Flex Consumption plan (timer, every 4 hours) calls `POST /api/sync` with its user-assigned managed identity. It wakes the
+  web app, which does the GitHub calls.
+- **Secrets**: the GitHub token is in Key Vault, referenced from App Settings; its value is set by hand and is never in Terraform, state or a pipeline. The
+  data-protection keys are files under `/home/data`.
+- **Access**: Entra ID sign-in in the app. No IP restrictions and no private endpoint. Network control, if wanted, is a Conditional Access policy requiring the
+  Global Secure Access compliant network, which blocks the sign-in (not the network) and is configured by the IT admin.
+- **Infrastructure and delivery**: Terraform in `infra/` and Azure DevOps Pipelines in `azure-pipelines/` (CI; infrastructure with an approval gate; deploy with a
+  `/healthz` smoke check). The Entra app registration is made by hand.
 
 ## 8. Build phases
 
@@ -210,13 +220,15 @@ CopilotUsage.sln
    job, tests against fixtures.
 3. **Home page** — theme, pool gauge, stat row, burn chart, leaderboard.
 4. **Users** — users table and drill-down page.
-5. **Ship** — Azure resources, access restrictions, deploy pipeline, README.
+5. **Sign-in and scheduling** — Entra ID sign-in, the sync endpoint, the Azure Function.
+6. **Ship** — Terraform, Azure DevOps pipelines, runbook, README. Then the first real deployment and the first-run checklist.
 
 ## 9. Needed from the organization
 
 - An org owner token for the sync job (type confirmed in the spike).
 - "Copilot usage metrics" policy enabled for the organization.
-- The office or VPN IP ranges for the App Service access restriction.
+- An Entra IT admin: the app registration (docs/AUTH.md), the `Sync.Run` role assignment and, optionally, the Conditional Access policy.
+- An Azure subscription, an Azure DevOps organization and a place for the Terraform state (docs/DEPLOY.md, steps 2 and 3).
 
 ## Sources
 
