@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "namePrefix": { "value": "copilotusage" },
+    "location": { "value": "westeurope" },
+    "skuName": { "value": "B1" },
+    "githubOrg": { "value": "your-org-login" },
+    "creditsPerSeat": { "value": 1900 },
+    "syncIntervalHours": { "value": 4 },
+    "allowedIpRanges": { "value": ["203.0.113.0/24", "198.51.100.7/32"] }
+  }
+}

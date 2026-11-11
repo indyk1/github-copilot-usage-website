@@ -1,0 +1,96 @@
+name: Deploy
+
+# Manual only. There is deliberately no push or pull_request trigger.
+on:
+  workflow_dispatch:
+
+# id-token: write lets the job exchange GitHub's OIDC token for an Azure token (no stored secret).
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  # Repository variables (Settings > Secrets and variables > Actions > Variables). None of these is a secret.
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check configuration
+        run: |
+          missing=""
+          for v in AZURE_WEBAPP_NAME AZURE_RESOURCE_GROUP AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error title=Deployment is not configured::Missing repository variable(s):$missing. Add them under Settings > Secrets and variables > Actions > Variables. See docs/DEPLOY.md, section 'Set up deployment from GitHub'."
+            exit 1
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error title=Wrong branch::Run this workflow on main (the Azure federated credential only trusts main). It was started on $GITHUB_REF."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-dotnet@v4.3.1
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build (warnings are errors)
+        run: |
+          dotnet restore CopilotUsage.sln
+          dotnet build CopilotUsage.sln --configuration Release --no-restore -warnaserror
+
+      - name: Test
+        run: dotnet test CopilotUsage.sln --configuration Release --no-build
+
+      - name: Publish
+        # SourceRevisionId puts the commit in the version shown in the page footer and on /healthz.
+        run: dotnet publish src/CopilotUsage.Web --configuration Release --output publish -p:SourceRevisionId=${{ github.sha }}
+
+      - name: Sign in to Azure (OIDC)
+        uses: azure/login@v2.3.0
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Check the web app exists
+        run: |
+          if ! az webapp show --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_WEBAPP_NAME" --query "{name:name,state:state}" --output table; then
+            echo "::error title=Web app not found::Could not read web app '$AZURE_WEBAPP_NAME' in resource group '$AZURE_RESOURCE_GROUP'. Check the repository variables and that the deployment identity has the Contributor role on the resource group."
+            exit 1
+          fi
+
+      # The deployment (SCM) site is locked to your IP ranges, and GitHub-hosted runners are not on the list.
+      # Allow this runner's address for the duration of the deploy, then remove it again (also when the deploy fails).
+      - name: Allow this runner on the deployment site
+        run: |
+          ip=$(curl -fsS https://api.ipify.org)
+          echo "RUNNER_IP=$ip" >> "$GITHUB_ENV"
+          az webapp config access-restriction add --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_WEBAPP_NAME" \
+            --rule-name github-deploy --action Allow --ip-address "$ip/32" --priority 900 --scm-site true
+          sleep 45
+
+      - name: Deploy
+        uses: azure/webapps-deploy@v3.0.1
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          package: publish
+
+      - name: Remove the runner from the deployment site
+        if: always()
+        run: |
+          az webapp config access-restriction remove --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_WEBAPP_NAME" \
+            --rule-name github-deploy --scm-site true || echo "::warning::Could not remove the github-deploy rule from the SCM site; remove it by hand (see docs/DEPLOY.md)."

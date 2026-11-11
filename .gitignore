@@ -26,3 +26,7 @@ data/
 secrets.json
 appsettings.Local.json
 appsettings.*.local.json
+
+# Real deployment parameters (the .example.json file is the template)
+infra/main.parameters.json
+infra/*.local.*
