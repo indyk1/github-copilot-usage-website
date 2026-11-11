@@ -1,0 +1,14 @@
+.fair { display: grid; gap: 0.35rem; min-width: 0; }
+.fair-text { color: var(--ink-1); font-size: var(--fs-xs); }
+.over-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0 0.45rem;
+    border-radius: var(--r-pill);
+    background: var(--danger-bg);
+    border: 1px solid rgba(251, 111, 138, 0.4);
+    color: var(--danger-ink);
+    font-weight: 700;
+    white-space: nowrap;
+}

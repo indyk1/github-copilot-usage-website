@@ -1,0 +1,27 @@
+@* Credits against the fair share: a bar with a tick at 100% and a text figure beside it. Past the fair share the bar changes
+   look and the text says "Over fair share", so the state never rests on colour. Fair share is a benchmark set by this
+   dashboard, not a GitHub limit. *@
+<div class="fair @(Over ? "over" : null)">
+    <ProgressBar Value="@Credits" Target="@FairShare" ScaleMax="2" Label="@Label"
+                 TargetLabel="@($"Fair share: {Fmt.Credits(FairShare)} credits")" />
+    <span class="fair-text num">
+        @if (Over)
+        {
+            <span class="over-flag"><Icon Name="arrow-up" Size="12" /> Over fair share <span>@Fmt.Percent(Percent)</span></span>
+        }
+        else
+        {
+            <span>@Fmt.Percent(Percent) of fair share</span>
+        }
+    </span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public decimal Credits { get; set; }
+    [Parameter] public decimal FairShare { get; set; } = 1900m;
+    /// <summary>Credits as a percent of the fair share (0..100, can pass 100).</summary>
+    [Parameter] public decimal? Percent { get; set; }
+    [Parameter] public string Label { get; set; } = "Credits against fair share";
+
+    private bool Over => FairShare > 0m && Credits > FairShare;
+}

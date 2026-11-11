@@ -44,7 +44,8 @@ h1 { margin-top: var(--s-1); font-size: var(--fs-2xl); letter-spacing: -0.025em;
 .tiles ::deep .wide { grid-column: 1 / -1; }
 .unit { white-space: nowrap; margin-left: 0.35em; color: var(--ink-1); font-size: var(--fs-md); font-weight: 600; letter-spacing: 0; }
 
-.lower { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--s-5); align-items: start; }
+/* Burn chart and model split share a row at similar heights; the leaderboard gets the full width below. */
+.mid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--s-5); align-items: stretch; }
 
 .empty { display: grid; justify-items: start; gap: var(--s-3); max-width: 40rem; margin: var(--s-5) auto; padding: var(--s-6); }
 .empty p { color: var(--ink-1); }
@@ -62,7 +63,7 @@ h1 { margin-top: var(--s-1); font-size: var(--fs-2xl); letter-spacing: -0.025em;
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 @media (max-width: 1020px) {
-    .hero, .lower { grid-template-columns: minmax(0, 1fr); }
+    .hero, .mid { grid-template-columns: minmax(0, 1fr); }
     .tiles { grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
     .tiles ::deep .wide { grid-column: auto; }
 }

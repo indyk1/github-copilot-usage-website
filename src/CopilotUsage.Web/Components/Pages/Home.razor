@@ -176,15 +176,10 @@
             </div>
         </div>
 
-        <GlassCard aria-labelledby="burn-h">
-            <SectionHeading Id="burn-h" Title="Burn chart" Subtitle="@($"Cumulative credits by day, {Fmt.Month(_summary.Month)}, against the pool limit and an even pace.")" />
-            <BurnChart Points="_summary.Burn" Limit="pool.Limit" />
-        </GlassCard>
-
-        <div class="lower">
-            <GlassCard aria-labelledby="board-h" Class="board-card">
-                <SectionHeading Id="board-h" Title="Leaderboard" Subtitle="Credits used this month, highest first." />
-                <Leaderboard Rows="_rows" FairShare="pool.CreditsPerSeat" />
+        <div class="mid">
+            <GlassCard aria-labelledby="burn-h" Class="burn-card">
+                <SectionHeading Id="burn-h" Title="Burn chart" Subtitle="@($"Cumulative credits by day, {Fmt.Month(_summary.Month)}, against the pool limit and an even pace.")" />
+                <BurnChart Points="_summary.Burn" Limit="pool.Limit" />
             </GlassCard>
 
             <GlassCard aria-labelledby="models-h" Class="models-card">
@@ -192,6 +187,11 @@
                 <ModelBars Models="_summary.ModelSplit" />
             </GlassCard>
         </div>
+
+        <GlassCard aria-labelledby="board-h" Class="board-card">
+            <SectionHeading Id="board-h" Title="Leaderboard" Subtitle="Credits used this month, highest first." />
+            <Leaderboard Rows="_rows" FairShare="pool.CreditsPerSeat" />
+        </GlassCard>
     }
 </div>
 

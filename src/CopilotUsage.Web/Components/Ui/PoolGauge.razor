@@ -83,7 +83,7 @@
         <p class="pace-note"><span class="pace-key" aria-hidden="true"></span> Even pace for today: <span class="num">@Fmt.Percent(p)</span>
             @if (Pool.PercentUsed is { } used)
             {
-                <span class="faint"> · @(used > p + 0.5m ? "ahead of pace" : used < p - 0.5m ? "behind pace" : "on pace")</span>
+                <span class="faint"> · @(used > p + 0.5m ? "spending faster than an even pace" : used < p - 0.5m ? "spending slower than an even pace" : "spending at an even pace")</span>
             }
         </p>
     }

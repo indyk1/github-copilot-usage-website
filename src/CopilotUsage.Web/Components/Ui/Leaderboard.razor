@@ -14,23 +14,12 @@ else
             <li>
                 <a class="row @(over ? "over" : null) @(r.Credits <= 0m ? "idle" : null)" href="/users/@Uri.EscapeDataString(r.Login)">
                     <span class="rank num" aria-label="@(r.Credits > 0m ? "Rank " + r.Rank : "Unranked, no credits used")">@(r.Credits > 0m ? r.Rank.ToString() : "–")</span>
-                    <span class="who"><Avatar Login="@r.Login" Url="@r.AvatarUrl" Size="34" /><span class="login">@r.Login</span></span>
-                    <span class="credits num"><strong>@Fmt.Credits(r.Credits)</strong><span class="unit"> credits</span></span>
-                    <span class="share num" title="Share of the whole pool">@Fmt.Percent(r.ShareOfPoolPercent, 1)<span class="unit"> of pool</span></span>
-                    <span class="fair">
-                        <ProgressBar Value="@r.Credits" Target="@FairShare" ScaleMax="2" Label="@($"{r.Login}: credits against fair share")"
-                                     TargetLabel="@($"Fair share: {Fmt.Credits(FairShare)} credits")" />
-                        <span class="fair-text num">
-                            @if (over)
-                            {
-                                <span class="over-flag"><Icon Name="arrow-up" Size="12" /> Over fair share <span>@Fmt.Percent(r.FairSharePercent)</span></span>
-                            }
-                            else
-                            {
-                                <span>@Fmt.Percent(r.FairSharePercent) of fair share</span>
-                            }
-                        </span>
+                    <span class="who"><Avatar Login="@r.Login" Url="@r.AvatarUrl" Size="34" /><span class="login" title="@r.Login">@r.Login</span></span>
+                    <span class="amount num">
+                        <span class="credits"><strong>@Fmt.Credits(r.Credits)</strong><span class="unit"> credits</span></span>
+                        <span class="share" title="Share of the whole pool">@Fmt.Percent(r.ShareOfPoolPercent, 1)<span class="unit"> of pool</span></span>
                     </span>
+                    <span class="fair"><FairShareMeter Credits="@r.Credits" FairShare="@FairShare" Percent="@r.FairSharePercent" Label="@($"{r.Login}: credits against fair share")" /></span>
                     <span class="go" aria-hidden="true"><Icon Name="chevron" Size="16" /></span>
                 </a>
             </li>

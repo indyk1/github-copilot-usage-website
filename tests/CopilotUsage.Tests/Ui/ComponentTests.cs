@@ -18,7 +18,7 @@ public class ComponentTests : BunitContext
         Assert.Contains("53%", cut.Markup);
         Assert.Contains("22,176", cut.Markup);
         Assert.DoesNotContain("Pool exhausted", cut.Markup);
-        Assert.Contains("ahead of pace", cut.Markup);
+        Assert.Contains("spending faster than an even pace", cut.Markup);
     }
 
     [Fact]

@@ -6,7 +6,7 @@
 <div class="burn" @ref="_host">
     <ul class="legend" aria-hidden="true">
         <li><span class="key key-actual"></span> Credits used (cumulative)</li>
-        <li><span class="key key-limit"></span> Pool limit</li>
+        <li><span class="key key-limit"></span> Pool limit@(Limit > 0m ? " · " + Fmt.Credits(Limit) : null)</li>
         <li><span class="key key-pace"></span> Even pace</li>
     </ul>
 
@@ -34,7 +34,10 @@
         @if (Limit > 0m)
         {
             <line class="limit" x1="@N(_left)" x2="@N(_right)" y1="@N(_limitY)" y2="@N(_limitY)" />
-            <SvgText Class="limit-label" X="@N(_left + 8)" Y="@N(_limitY - 7)">Pool limit · @Fmt.Credits(Limit)</SvgText>
+            @if (_labelShown)
+            {
+                <SvgText Class="limit-label" X="@N(_labelX)" Y="@N(_labelY)" Anchor="@_labelAnchor">@LimitText</SvgText>
+            }
             <path class="pace" d="@_pacePath" />
         }
 
@@ -106,6 +109,11 @@
     private string _actualPath = "", _areaPath = "", _pacePath = "";
     private BurnPoint? _lastActual;
     private bool _overShown;
+    private bool _labelShown;
+    private double _labelX, _labelY;
+    private string _labelAnchor = "start";
+
+    private string LimitText => "Pool limit · " + Fmt.Credits(Limit);
 
     private string N(double v) => v.ToString("0.##", Inv);
 
@@ -160,6 +168,61 @@
         _areaPath = actual.Count == 0 ? "" : _actualPath + $" L {N(X(actual[^1].DayOfMonth))} {N(_bottom)} L {N(X(actual[0].DayOfMonth))} {N(_bottom)} Z";
         _pacePath = Points.Count == 0 ? "" : "M " + string.Join(" L ", Points.Select(p => $"{N(X(p.DayOfMonth))} {N(Y(p.EvenPace))}"));
         _overShown = Limit > 0m && maxActual > Limit;
+        PlaceLimitLabel(actual);
+    }
+
+    /// <summary>
+    /// Puts the limit label on whichever side of the limit line (left or right end, above or below) has no data line or
+    /// even-pace line through it. If every spot is taken the label is left out; the legend still names the limit.
+    /// </summary>
+    private void PlaceLimitLabel(List<BurnPoint> actual)
+    {
+        _labelShown = false;
+        if (Limit <= 0m || Points.Count == 0) return;
+
+        const double pad = 7;
+        var width = LimitText.Length * 6.9 + 4;
+        var series = new List<(double X, double Y)>[]
+        {
+            actual.Select(p => (X(p.DayOfMonth), Y(p.Cumulative!.Value))).ToList(),
+            Points.Select(p => (X(p.DayOfMonth), Y(p.EvenPace))).ToList(),
+        };
+
+        foreach (var (right, above) in new[] { (false, true), (true, true), (false, false), (true, false) })
+        {
+            var x0 = right ? _right - 8 - width : _left + 8;
+            var x1 = x0 + width;
+            var y1 = above ? _limitY - 5 : _limitY + 18;   // text baseline
+            var top = y1 - 14 - 3;
+            var bottom = y1 + 4 + (above ? 0 : 3);
+            if (top < _top - 6 || bottom > _bottom) continue;
+            if (series.Any(s => Crosses(s, x0 - pad, x1 + pad, top, bottom))) continue;
+            (_labelX, _labelY, _labelAnchor, _labelShown) = (right ? _right - 8 : _left + 8, y1, right ? "end" : "start", true);
+            return;
+        }
+    }
+
+    /// <summary>True if the polyline passes through the rectangle (checked by sampling along each segment).</summary>
+    private static bool Crosses(List<(double X, double Y)> line, double x0, double x1, double top, double bottom)
+    {
+        for (var i = 0; i < line.Count; i++)
+        {
+            var (ax, ay) = line[i];
+            if (i == line.Count - 1)
+            {
+                if (ax >= x0 && ax <= x1 && ay >= top && ay <= bottom) return true;
+                continue;
+            }
+            var (bx, by) = line[i + 1];
+            const int steps = 24;
+            for (var k = 0; k <= steps; k++)
+            {
+                var x = ax + (bx - ax) * k / steps;
+                var y = ay + (by - ay) * k / steps;
+                if (x >= x0 && x <= x1 && y >= top && y <= bottom) return true;
+            }
+        }
+        return false;
     }
 
     private string DayLabel(BurnPoint p) => p.Cumulative is null
