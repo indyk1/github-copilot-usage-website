@@ -1,5 +1,251 @@
 @page "/users"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using CopilotUsage.Core
+@using CopilotUsage.Data.Queries
+@inject IServiceScopeFactory Scopes
+@inject TimeProvider Time
+@inject IOptions<CopilotOptions> Copilot
+@inject ILogger<Users> Logger
 
 <PageTitle>Users · Copilot Usage</PageTitle>
 
-<ComingSoon Title="Users" Text="A searchable, sortable table of every seat arrives in the next phase. Until then, the leaderboard on the home page ranks everyone by credits used this month." />
+<div class="users">
+    <header class="page-head">
+        <p class="eyebrow">Seats@(_month is null ? null : " · " + Fmt.Month(_month.Value))</p>
+        <h1>Users</h1>
+        <p class="lede">Every Copilot seat and what it has used this month. Choose a person to see the detail.</p>
+    </header>
+
+    @if (_loadError is not null)
+    {
+        <div class="banner danger" role="alert">
+            <StatusBadge Tone="StatusBadge.BadgeTone.Danger" Text="Could not load" />
+            <p>@_loadError</p>
+            <button type="button" class="btn" @onclick="ReloadAsync">Try again</button>
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="skeleton" role="status" aria-label="Loading users"><div></div></div>
+    }
+    else if (_rows is null)
+    {
+        @* The load failed and there is nothing earlier to show; the banner above says why. *@
+    }
+    else if (_rows.Count == 0)
+    {
+        <GlassCard Class="empty">
+            <Icon Name="users" Size="28" />
+            <h2>No seats yet</h2>
+            <p>The database holds no Copilot seats, so there is nobody to list. Assign seats on GitHub, then press Refresh on the overview.</p>
+            <a class="btn" href="/">Back to the overview</a>
+        </GlassCard>
+    }
+    else
+    {
+        var now = Time.GetUtcNow();
+        <GlassCard Class="table-card" aria-label="Users table">
+            <div class="toolbar">
+                <div class="search">
+                    <label for="user-search" class="visually-hidden">Search users by login</label>
+                    <span class="lens"><Icon Name="search" Size="16" /></span>
+                    <input id="user-search" type="search" placeholder="Search by login" autocomplete="off" spellcheck="false"
+                           @bind="Search" @bind:event="oninput" @bind:after="Recompute" />
+                    @if (Search.Length > 0)
+                    {
+                        <button type="button" class="clear" aria-label="Clear search" @onclick="ClearSearch"><Icon Name="x" Size="14" /></button>
+                    }
+                </div>
+
+                <div class="sortbar">
+                    <label for="user-sort">Sort by</label>
+                    <select id="user-sort" @onchange="OnSortSelected">
+                        @foreach (var c in Columns)
+                        {
+                            <option value="@UsersTable.Key(c.Sort)" selected="@(c.Sort == _sort)">@c.Title</option>
+                        }
+                    </select>
+                    <button type="button" class="btn dir" @onclick="FlipDirection" aria-label="@(_desc ? "Descending, switch to ascending" : "Ascending, switch to descending")">
+                        <span class="@(_desc ? "flip" : null)"><Icon Name="arrow-up" Size="16" /></span>
+                    </button>
+                </div>
+
+                <p class="count" role="status" aria-live="polite">@CountText</p>
+            </div>
+
+            @if (_view.Count == 0)
+            {
+                <div class="nomatch">
+                    <Icon Name="search" Size="24" />
+                    <h2>No users match “@Search.Trim()”</h2>
+                    <p>Check the spelling, or search for part of a login.</p>
+                    <button type="button" class="btn" @onclick="ClearSearch">Clear search</button>
+                </div>
+            }
+            else
+            {
+                <table class="grid" role="table" aria-label="Copilot seats, sorted by @SortDescription">
+                    <thead role="rowgroup">
+                        <tr role="row">
+                            @foreach (var c in Columns)
+                            {
+                                <th scope="col" role="columnheader" class="c-@UsersTable.Key(c.Sort) @(c.Numeric ? "numeric" : null)"
+                                    aria-sort="@UsersTable.AriaSort(c.Sort, _sort, _desc)">
+                                    <button type="button" class="sort" @onclick="() => SortBy(c.Sort)">
+                                        <span>@c.Title</span>
+                                        <span class="arrow @(c.Sort == _sort && _desc ? "flip" : null)" aria-hidden="true"><Icon Name="arrow-up" Size="13" /></span>
+                                    </button>
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody role="rowgroup">
+                        @foreach (var r in _view)
+                        {
+                            var inactive = UsersTable.IsInactive(r);
+                            var over = Copilot.Value.CreditsPerSeat > 0m && r.Credits > Copilot.Value.CreditsPerSeat;
+                            <tr role="row" class="row @(inactive ? "idle" : null) @(over ? "over" : null)">
+                                <th scope="row" role="rowheader" class="c-user">
+                                    <a class="link" href="/users/@Uri.EscapeDataString(r.Login)">
+                                        <Avatar Login="@r.Login" Url="@r.AvatarUrl" Size="34" />
+                                        <span class="who">
+                                            <span class="login" title="@r.Login">@r.Login</span>
+                                            @if (inactive || !r.SeatActive)
+                                            {
+                                                <span class="flags">
+                                                    @if (inactive) { <StatusBadge Tone="StatusBadge.BadgeTone.Info" Icon="clock" Text="No usage this month" /> }
+                                                    @if (!r.SeatActive) { <StatusBadge Tone="StatusBadge.BadgeTone.Warn" Text="Seat ended" /> }
+                                                </span>
+                                            }
+                                        </span>
+                                    </a>
+                                </th>
+                                <td role="cell" class="numeric c-credits" data-label="Credits"><strong>@Fmt.Credits(r.Credits)</strong><span class="unit"> credits</span></td>
+                                <td role="cell" class="c-fair" data-label="Fair share">
+                                    <FairShareMeter Credits="@r.Credits" FairShare="@Copilot.Value.CreditsPerSeat" Percent="@r.FairSharePercent" Label="@($"{r.Login}: credits against fair share")" />
+                                </td>
+                                <td role="cell" class="numeric c-prompts" data-label="Prompts">@Fmt.Number(r.Prompts)</td>
+                                <td role="cell" class="numeric c-acceptance" data-label="Acceptance">
+                                    @if (r.AcceptanceRate is { } rate) { <span>@Fmt.Percent(rate * 100m, 1)</span> }
+                                    else { <span aria-hidden="true" title="No suggestions this month">–</span><span class="visually-hidden">None</span> }
+                                </td>
+                                <td role="cell" class="c-model" data-label="Top model">
+                                    @if (!string.IsNullOrWhiteSpace(r.TopModel)) { <span>@r.TopModel</span> }
+                                    else { <span aria-hidden="true">–</span><span class="visually-hidden">None</span> }
+                                </td>
+                                <td role="cell" class="c-active" data-label="Last active">
+                                    @if (r.LastActiveAt is { } last)
+                                    {
+                                        <time datetime="@last.UtcDateTime.ToString("yyyy-MM-dd")" title="@last.UtcDateTime.ToString("d MMM yyyy")">@Fmt.RelativeDay(last, now)</time>
+                                    }
+                                    else { <span>Never</span> }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            <p class="note"><Icon Name="info" Size="14" /> <span><strong>Fair share</strong> is @Fmt.Credits(Copilot.Value.CreditsPerSeat) credits per user, a benchmark set by this dashboard. It is not a GitHub limit: the pool is shared by the whole organization.</span></p>
+        </GlassCard>
+    }
+</div>
+
+@code {
+    private sealed record Column(UserSort Sort, string Title, bool Numeric);
+
+    private static readonly Column[] Columns =
+    [
+        new(UserSort.User, "User", false),
+        new(UserSort.Credits, "Credits", true),
+        new(UserSort.FairShare, "Fair share", false),
+        new(UserSort.Prompts, "Prompts", true),
+        new(UserSort.Acceptance, "Acceptance", true),
+        new(UserSort.TopModel, "Top model", false),
+        new(UserSort.LastActive, "Last active", false),
+    ];
+
+    /// <summary>Optional starting state from the address: ?q=chen&amp;sort=prompts&amp;dir=asc. Handy for sharing a view.</summary>
+    [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+    [SupplyParameterFromQuery(Name = "sort")] public string? SortKey { get; set; }
+    [SupplyParameterFromQuery(Name = "dir")] public string? Dir { get; set; }
+
+    private IReadOnlyList<UserRow>? _rows;
+    private IReadOnlyList<UserRow> _view = [];
+    private CopilotUsage.Core.Calculations.BillingMonth? _month;
+    private string? _loadError;
+    private bool _loading = true;
+
+    private string Search { get; set; } = "";
+    private UserSort _sort = UserSort.Credits;
+    private bool _desc = true;
+
+    private string CountText => _rows is null ? "" : _view.Count == _rows.Count
+        ? Fmt.Plural(_rows.Count, "user")
+        : $"{Fmt.Number(_view.Count)} of {Fmt.Plural(_rows.Count, "user")} match";
+
+    private string SortDescription =>
+        $"{Columns.First(c => c.Sort == _sort).Title.ToLowerInvariant()}, {(_desc ? "descending" : "ascending")}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Search = Q?.Trim() ?? "";
+        if (UsersTable.ParseKey(SortKey) is { } s) _sort = s;
+        _desc = Dir?.ToLowerInvariant() switch { "asc" => false, "desc" => true, _ => UsersTable.DefaultDescending(_sort) };
+        await LoadAsync();
+        _loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+            var queries = scope.ServiceProvider.GetRequiredService<UsageQueries>();
+            _month = queries.CurrentMonth;
+            _rows = await queries.GetUsersTableAsync();
+            _loadError = null;
+            Recompute();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not load the users table.");
+            _loadError = _rows is null ? "The users could not be read from the database." : "The users could not be reloaded; the earlier list is still shown.";
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = _rows is null;
+        await LoadAsync();
+        _loading = false;
+    }
+
+    private void Recompute() => _view = _rows is null ? [] : UsersTable.Sort(UsersTable.Filter(_rows, Search), _sort, _desc);
+
+    private void SortBy(UserSort column)
+    {
+        (_sort, _desc) = UsersTable.Toggle(_sort, _desc, column);
+        Recompute();
+    }
+
+    private void OnSortSelected(ChangeEventArgs e)
+    {
+        if (UsersTable.ParseKey(e.Value?.ToString()) is not { } s || s == _sort) return;
+        (_sort, _desc) = (s, UsersTable.DefaultDescending(s));
+        Recompute();
+    }
+
+    private void FlipDirection()
+    {
+        _desc = !_desc;
+        Recompute();
+    }
+
+    private void ClearSearch()
+    {
+        Search = "";
+        Recompute();
+    }
+}

@@ -74,4 +74,24 @@ public static class Fmt
     /// <summary>"1 day", "20 days".</summary>
     public static string Plural(int count, string singular, string? plural = null) =>
         $"{count.ToString("N0", C)} {(count == 1 ? singular : plural ?? singular + "s")}";
+
+    /// <summary>A whole number with thousands separators: "12,480".</summary>
+    public static string Number(long value) => value.ToString("N0", C);
+
+    /// <summary>
+    /// For dates that only know the day (metrics are daily): "today", "yesterday", "5 days ago", then "3 Sep" for
+    /// anything older than two weeks. Never says hours, because the time of day is not known.
+    /// </summary>
+    public static string RelativeDay(DateTimeOffset value, DateTimeOffset now)
+    {
+        var days = now.UtcDateTime.Date.Subtract(value.UtcDateTime.Date).Days;
+        return days switch
+        {
+            < 0 => "today",
+            0 => "today",
+            1 => "yesterday",
+            <= 14 => $"{days} days ago",
+            _ => value.UtcDateTime.ToString("d MMM", C),
+        };
+    }
 }
