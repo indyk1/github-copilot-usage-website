@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="@Assets["theme.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["CopilotUsage.Web.styles.css"]" />
-    <ImportMap />
+    <ImportMap nonce="@Nonce" />
     <HeadOutlet />
 </head>
 
@@ -23,3 +23,10 @@
 </body>
 
 </html>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    /// <summary>The per-request nonce the Content-Security-Policy allows for the import map's inline script.</summary>
+    private string? Nonce => HttpContext is null ? null : SecurityHeaders.NonceFor(HttpContext);
+}

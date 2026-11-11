@@ -31,6 +31,8 @@ public static class StartupConfigValidator
                 errors.Add("GitHub:Org is required when Demo:Enabled is false. Set it in configuration (e.g. environment variable GitHub__Org).");
             if (string.IsNullOrWhiteSpace(gh.Token))
                 errors.Add("GitHub:Token is required when Demo:Enabled is false. Supply it from configuration only (user secrets, environment variable GitHub__Token, or a Key Vault reference), never from a file in the repo. To explore without GitHub set Demo:Enabled=true.");
+            else if (gh.Token.TrimStart().StartsWith("@Microsoft.KeyVault", StringComparison.OrdinalIgnoreCase))
+                errors.Add("GitHub:Token is still the text of a Key Vault reference, so App Service could not resolve it. Check that the web app's managed identity can read the secret and that the reference is spelled correctly (Configuration, then the green tick next to the setting).");
         }
 
         if (!CopilotUsage.Data.Demo.DemoScenarios.TryParse(demo.Scenario, out _))

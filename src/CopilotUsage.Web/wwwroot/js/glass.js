@@ -71,6 +71,23 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();
 
+    // ---- Avatars ---------------------------------------------------------------------------------
+    // A picture that fails to load is hidden so the initials underneath show. This is a script, not an onerror attribute,
+    // because the Content-Security-Policy forbids inline event handlers. Error events do not bubble, so listen while capturing.
+    function hideIfBroken(img) {
+        if (img.complete && img.naturalWidth === 0 && img.currentSrc) img.style.display = 'none';
+    }
+    document.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && t.tagName === 'IMG' && t.closest && t.closest('.avatar')) t.style.display = 'none';
+    }, true);
+    function sweepAvatars() {
+        var imgs = document.querySelectorAll('.avatar img');
+        for (var i = 0; i < imgs.length; i++) hideIfBroken(imgs[i]);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sweepAvatars);
+    else sweepAvatars();
+
     // ---- Element width for the charts ----------------------------------------------------------
     // The chart draws in real pixels so its text stays 12px on a phone instead of scaling down with the SVG.
     var observers = new WeakMap();

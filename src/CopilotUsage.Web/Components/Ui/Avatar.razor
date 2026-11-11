@@ -1,10 +1,9 @@
-@* A round avatar. Initials always sit underneath; the picture covers them once it loads and is hidden again if it fails. *@
+@* A round avatar. Initials always sit underneath; the picture covers them once it loads and is hidden again if it fails (see glass.js; inline handlers are not allowed by the CSP). *@
 <span class="avatar" style="--hue: @Hue; --size: @Size.ToString(System.Globalization.CultureInfo.InvariantCulture)px" aria-hidden="true">
     <span class="initials">@Initials.From(Login)</span>
     @if (!string.IsNullOrWhiteSpace(Url))
     {
-        <img src="@Url" alt="" width="@Size" height="@Size" loading="lazy" decoding="async" referrerpolicy="no-referrer"
-             onerror="this.style.display='none'" />
+        <img src="@Url" alt="" width="@Size" height="@Size" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
     }
 </span>
 

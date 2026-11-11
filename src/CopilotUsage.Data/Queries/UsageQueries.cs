@@ -196,6 +196,13 @@ public sealed class UsageQueries(CopilotUsageDbContext db, TimeProvider time, IO
 
     public Task<SyncInfo?> GetLastSyncAsync(CancellationToken ct = default) => GetLatestSyncAsync(ct);
 
+    /// <summary>The newest sync run that finished with every step succeeded (a partial failure does not count). Also proves the database is readable.</summary>
+    public async Task<SyncInfo?> GetLastFullySuccessfulSyncAsync(CancellationToken ct = default)
+    {
+        var r = await db.SyncRuns.AsNoTracking().Where(x => x.Status == SyncStatus.Succeeded).OrderByDescending(x => x.Id).FirstOrDefaultAsync(ct);
+        return r is null ? null : new SyncInfo(r.Id, r.StartedAt, r.FinishedAt, r.Status.ToString(), r.IsDemo, r.Error);
+    }
+
     // ---- helpers ----
 
     private static IReadOnlyList<ActivityItem> Activity(IEnumerable<UserMetricBreakdown> rows, MetricDimension dimension) =>

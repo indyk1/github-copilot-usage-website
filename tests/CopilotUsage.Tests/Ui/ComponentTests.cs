@@ -3,6 +3,8 @@ using CopilotUsage.Core.Calculations;
 using CopilotUsage.Data.Queries;
 using CopilotUsage.Web.Components.Ui;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using LeaderboardView = CopilotUsage.Web.Components.Ui.Leaderboard;
 
 namespace CopilotUsage.Tests.Ui;
@@ -10,6 +12,24 @@ namespace CopilotUsage.Tests.Ui;
 public class ComponentTests : BunitContext
 {
     private static PoolSummary Pool(decimal used) => PoolCalculator.Summarize(25, 1900m, used);
+
+    [Fact]
+    public void Footer_shows_the_deployed_version()
+    {
+        Services.AddSingleton(Options.Create(new CopilotUsage.Web.Config.DemoOptions()));
+        var cut = Render<CopilotUsage.Web.Components.Layout.MainLayout>(p => p.Add(x => x.Body, (RenderFragment)(b => b.AddContent(0, "x"))));
+        Assert.Contains("Version " + CopilotUsage.Web.AppVersion.Full, cut.Find("footer .ver").TextContent);
+    }
+
+    [Fact]
+    public void Error_page_is_themed_helpful_and_links_home()
+    {
+        var cut = Render<CopilotUsage.Web.Components.Pages.Error>();
+        Assert.Equal("Something went wrong", cut.Find("h1").TextContent);
+        Assert.Contains("glass", cut.Find("[aria-labelledby=err-h]").ClassName ?? "", StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("/", cut.Find("a.btn-primary").GetAttribute("href"));
+        Assert.DoesNotContain("Development", cut.Markup);
+    }
 
     [Fact]
     public void Gauge_shows_percent_and_remaining_without_an_alert_while_within_the_pool()
@@ -52,11 +72,12 @@ public class ComponentTests : BunitContext
     }
 
     [Fact]
-    public void Avatar_has_initials_and_an_image_that_hides_itself_on_error()
+    public void Avatar_has_initials_and_an_image_with_no_inline_handler()
     {
         var cut = Render<Avatar>(p => p.Add(x => x.Login, "maya-chen").Add(x => x.Url, "https://example.test/a.png"));
         Assert.Equal("MC", cut.Find(".initials").TextContent);
-        Assert.Contains("display='none'", cut.Find("img").GetAttribute("onerror"));
+        // The CSP forbids inline handlers; glass.js hides a broken picture instead.
+        Assert.Null(cut.Find("img").GetAttribute("onerror"));
 
         var none = Render<Avatar>(p => p.Add(x => x.Login, "maya-chen"));
         Assert.Empty(none.FindAll("img"));
@@ -80,9 +101,32 @@ public class ComponentTests : BunitContext
     }
 
     [Fact]
+    public void Leaderboard_with_nobody_over_zero_credits_shows_one_message_and_a_link_to_all_users()
+    {
+        var rows = Enumerable.Range(1, 10).Select(i => new LeaderboardRow(i, $"user-{i}", null, 0m, 0m, 0m, 0m, false)).ToList();
+        var cut = Render<LeaderboardView>(p => p.Add(x => x.Rows, rows));
+
+        Assert.Empty(cut.FindAll("a.row"));
+        Assert.Empty(cut.FindAll("ol"));
+        Assert.Contains("No credits have been used this month", cut.Find("#leaderboard-empty").TextContent);
+        var link = cut.Find("#leaderboard-empty a");
+        Assert.Equal("/users", link.GetAttribute("href"));
+        Assert.Contains("10", link.TextContent);
+    }
+
+    [Fact]
+    public void Leaderboard_with_a_single_active_user_still_lists_everyone()
+    {
+        var rows = new List<LeaderboardRow> { new(1, "a", null, 5m, 0.05m, 0m, 0.3m, false), new(2, "b", null, 0m, 0m, 0m, 0m, false) };
+        var cut = Render<LeaderboardView>(p => p.Add(x => x.Rows, rows));
+        Assert.Equal(2, cut.FindAll("a.row").Count);
+        Assert.Empty(cut.FindAll("#leaderboard-empty"));
+    }
+
+    [Fact]
     public void Leaderboard_escapes_logins_in_links()
     {
-        var rows = new List<LeaderboardRow> { new(1, "a b/c", null, 0m, 0m, 0m, 0m, false) };
+        var rows = new List<LeaderboardRow> { new(1, "a b/c", null, 5m, 0.05m, 0m, 0.3m, false) };
         var cut = Render<LeaderboardView>(p => p.Add(x => x.Rows, rows));
         Assert.Equal("/users/a%20b%2Fc", cut.Find("a.row").GetAttribute("href"));
     }

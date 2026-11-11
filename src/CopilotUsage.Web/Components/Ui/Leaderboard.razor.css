@@ -51,3 +51,6 @@
     .fair { grid-area: fair; }
     .go { grid-area: go; }
 }
+
+.nousage { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3) var(--s-4); }
+.nousage .empty { margin: 0; }

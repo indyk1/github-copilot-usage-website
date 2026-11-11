@@ -5,7 +5,11 @@ using CopilotUsage.Data.Queries;
 using CopilotUsage.GitHub;
 using CopilotUsage.Web.Components;
 using CopilotUsage.Web.Config;
+using CopilotUsage.Web.Health;
+using CopilotUsage.Web.Hosting;
 using CopilotUsage.Web.Sync;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,6 +34,17 @@ builder.Services.AddGitHubClient();
 builder.Services.AddSingleton<ISyncService, SyncService>();
 builder.Services.AddHostedService<SyncWorker>();
 
+// App Service terminates TLS in its front end and forwards over plain http with X-Forwarded-* headers. Its front-end
+// addresses are not fixed, so no proxy list is configured; the site is only reachable through that front end.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownIPNetworks.Clear();
+    o.KnownProxies.Clear();
+});
+// Behind the proxy the app has no https port of its own to redirect to; the public one is 443.
+builder.Services.AddHttpsRedirection(o => o.HttpsPort = 443);
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
@@ -53,11 +68,14 @@ await using (var scope = app.Services.CreateAsyncScope())
 if (demo)
     await app.Services.GetRequiredService<ISyncService>().RunAsync(SyncTrigger.Demo);
 
+app.UseForwardedHeaders();
+app.UseSecurityHeaders(SecurityHeaders.ResolveCsp(app.Configuration));
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
-    app.UseHttpsRedirection();
+    // The health probe may arrive over plain http from inside App Service; it must get an answer, not a redirect.
+    app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/healthz"), b => b.UseHttpsRedirection());
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
@@ -87,6 +105,14 @@ app.Use(async (ctx, next) =>
     }
     await next();
 });
+
+// Reachable without any other check; reports only database reachability and sync times (see HealthReporter).
+app.MapGet("/healthz", async (HttpContext ctx, UsageQueries queries, IOptions<SyncOptions> sync, IOptions<DemoOptions> demoOptions, TimeProvider time) =>
+{
+    var report = await HealthReporter.BuildAsync(queries, sync.Value, demoOptions.Value, time, ctx.RequestAborted);
+    ctx.Response.Headers.CacheControl = "no-store";
+    return Results.Json(report, statusCode: report.IsServing ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+}).DisableAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

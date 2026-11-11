@@ -26,4 +26,3 @@ data/
 secrets.json
 appsettings.Local.json
 appsettings.*.local.json
-**/appsettings.Production.json

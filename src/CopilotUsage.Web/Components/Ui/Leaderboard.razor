@@ -5,6 +5,13 @@
 {
     <p class="empty">No active seats yet.</p>
 }
+else if (Rows.All(r => r.Credits <= 0m))
+{
+    <div class="nousage" id="leaderboard-empty">
+        <p class="empty">No credits have been used this month, so there is nothing to rank yet.</p>
+        <a class="btn" href="/users">All users (@Rows.Count)</a>
+    </div>
+}
 else
 {
     <ol class="board" id="leaderboard-list">
