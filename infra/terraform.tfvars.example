@@ -1,0 +1,27 @@
+# Copy to terraform.tfvars for LOCAL runs (that file is git-ignored). The pipeline does not use this file: it passes the same
+# values from Azure DevOps variables (docs/DEPLOY.md, step 3). Placeholder values only: never commit real ones.
+
+resource_group_name = "rg-copilot-usage"
+name_prefix         = "copilotusage"
+github_org          = "your-github-org"
+
+# From the Entra app registration the IT admin created (docs/AUTH.md). Not secrets, but still environment-specific.
+entra_tenant_id = "00000000-0000-0000-0000-000000000000"
+entra_client_id = "00000000-0000-0000-0000-000000000000"
+
+# Optional. Defaults shown.
+# location                             = "westeurope"      # default: the resource group's region
+# entra_app_id_uri                     = ""                # only if it is not api://<entra_client_id>
+# credits_per_seat                     = 1900
+# sync_interval_hours                  = 4
+# web_sku                              = "F1"              # change to e.g. "B1" to move to a paid plan
+# web_public_base_url                  = ""                # only with a custom domain on a paid plan
+# disable_basic_auth_publishing        = true
+# enable_monitoring                    = true
+# log_daily_cap_gb                     = 0.1
+# log_retention_days                   = 30
+# function_instance_memory_mb          = 512
+# key_vault_secrets_officer_object_ids = ["00000000-0000-0000-0000-000000000000"]
+# tags                                 = { owner = "it" }
+
+# NEVER add the GitHub token here or anywhere in Terraform: it is set by hand in Key Vault (docs/DEPLOY.md, step 5).

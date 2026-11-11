@@ -27,8 +27,24 @@ secrets.json
 appsettings.Local.json
 appsettings.*.local.json
 
-# Real deployment parameters (the .example.json file is the template)
-infra/main.parameters.json
+# Terraform: never commit state, plans, provider downloads or real variable values.
+# (.terraform.lock.hcl IS committed: it pins the exact provider build. terraform.tfvars.example is the template.)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
 infra/*.local.*
 
 # Azure Functions local settings (the .example.json file is the template)
