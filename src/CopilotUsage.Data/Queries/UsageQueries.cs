@@ -162,6 +162,9 @@ public sealed class UsageQueries(CopilotUsageDbContext db, TimeProvider time, IO
             active.Count, daily.Count(d => d.UsedChat), daily.Count(d => d.UsedAgent),
             active.Count > 0 ? active.Max(d => d.Day) : null);
 
+        var (seatCount, _) = await GetSeatCountsAsync(ct);
+        var poolLimit = PoolCalculator.Limit(seatCount, CreditsPerSeat);
+
         return new UserDetail(
             m, canonical, seat?.AvatarUrl, seat?.AssigningTeam, seat?.IsActive ?? false,
             seat?.LastActivityAt, seat?.LastActivityEditor,
@@ -174,7 +177,21 @@ public sealed class UsageQueries(CopilotUsageDbContext db, TimeProvider time, IO
             Activity(breakdowns, MetricDimension.Client),
             Activity(breakdowns, MetricDimension.Language),
             Activity(breakdowns, MetricDimension.Model),
-            productivity);
+            productivity,
+            poolLimit, PoolCalculator.PercentOf(credits, poolLimit));
+    }
+
+    /// <summary>
+    /// True when <see cref="GetUserDetailAsync"/> would find the login (a seat row, or billing or metrics rows this month).
+    /// Cheap enough to run before serving a page, so an unknown login can answer with a 404.
+    /// </summary>
+    public async Task<bool> UserExistsAsync(string login, BillingMonth? month = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(login)) return false;
+        var m = month ?? CurrentMonth;
+        return await db.Seats.AnyAsync(s => s.Login == login, ct)
+            || await db.UserModelMonthly.AnyAsync(x => x.UserLogin == login && x.MonthStart == m.Start, ct)
+            || await db.UserMetricDaily.AnyAsync(x => x.UserLogin == login && x.Day >= m.Start && x.Day < m.NextStart, ct);
     }
 
     public Task<SyncInfo?> GetLastSyncAsync(CancellationToken ct = default) => GetLatestSyncAsync(ct);

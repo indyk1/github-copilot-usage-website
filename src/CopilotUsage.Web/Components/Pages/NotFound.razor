@@ -1,5 +1,36 @@
-﻿@page "/not-found"
+@page "/not-found"
 @layout MainLayout
+@using Microsoft.AspNetCore.Diagnostics
 
-<h3>Not Found</h3>
-<p>Sorry, the content you are looking for does not exist.</p>
+<PageTitle>Not found · Copilot Usage</PageTitle>
+
+@if (_unknownUser is not null)
+{
+    <UserNotFound Login="@_unknownUser" />
+}
+else
+{
+    <GlassCard Class="nf" aria-labelledby="nf-h">
+        <Icon Name="search" Size="28" />
+        <h1 id="nf-h">Page not found</h1>
+        <p>Sorry, there is nothing at this address.</p>
+        <div class="actions">
+            <a class="btn btn-primary" href="/">Back to the overview</a>
+            <a class="btn" href="/users">All users</a>
+        </div>
+    </GlassCard>
+}
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private string? _unknownUser;
+
+    /// <summary>A request for /users/{login} that the server answered with 404 is re-run here; say which login was missing.</summary>
+    protected override void OnInitialized()
+    {
+        var original = HttpContext?.Features.Get<IStatusCodeReExecuteFeature>()?.OriginalPath;
+        if (original is not null && original.StartsWith("/users/", StringComparison.OrdinalIgnoreCase))
+            _unknownUser = Uri.UnescapeDataString(original["/users/".Length..]).Trim('/');
+    }
+}

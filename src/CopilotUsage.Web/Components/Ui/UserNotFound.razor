@@ -1,0 +1,14 @@
+@* Shown when a login has no seat and no usage this month. The server also answers such a direct request with HTTP 404. *@
+<GlassCard Class="nf" aria-labelledby="nf-h">
+    <Icon Name="search" Size="28" />
+    <h1 id="nf-h">@(string.IsNullOrWhiteSpace(Login) ? "User not found" : $"No user named “{Login}”")</h1>
+    <p>No Copilot seat or usage was found for this login this month. The login may be misspelled, or the seat may have been removed before this month began.</p>
+    <div class="actions">
+        <a class="btn btn-primary" href="/users"><Icon Name="arrow-left" Size="16" /> Back to all users</a>
+        <a class="btn" href="/">Overview</a>
+    </div>
+</GlassCard>
+
+@code {
+    [Parameter] public string? Login { get; set; }
+}

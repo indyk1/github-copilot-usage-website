@@ -1,0 +1,44 @@
+@using CopilotUsage.Data.Queries
+@* Activity counts as ranked bars. Each row says what it counts ("1,240 prompts"), so the bar only decorates.
+   These are activity figures from GitHub's metrics, not credits and not cost. *@
+@if (_rows.Count == 0)
+{
+    <p class="empty">@EmptyText</p>
+}
+else
+{
+    <ul class="act">
+        @foreach (var r in _rows)
+        {
+            <li>
+                <div class="top">
+                    <span class="name" title="@r.Label">@r.Label</span>
+                    <span class="figs num">@r.Text</span>
+                </div>
+                @if (r.Detail is not null)
+                {
+                    <div class="detail num">@r.Detail</div>
+                }
+                <div class="bar" aria-hidden="true"><div class="fill" style="width: @Width(r)%"></div></div>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ActivityItem> Items { get; set; } = [];
+    [Parameter, EditorRequired] public Func<string?, string> Label { get; set; } = k => k ?? "";
+    [Parameter] public int MaxRows { get; set; } = 6;
+    [Parameter] public string EmptyText { get; set; } = "Nothing recorded this month.";
+
+    private IReadOnlyList<ActivityRow> _rows = [];
+    private long _max;
+
+    protected override void OnParametersSet()
+    {
+        _rows = ActivityView.Rows(Items, Label, MaxRows);
+        _max = _rows.Count == 0 ? 0 : _rows.Max(r => r.Count);
+    }
+
+    private string Width(ActivityRow r) => (_max <= 0 ? 0m : (decimal)r.Count / _max * 100m).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+}

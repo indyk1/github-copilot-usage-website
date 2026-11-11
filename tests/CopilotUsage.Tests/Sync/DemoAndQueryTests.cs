@@ -226,6 +226,29 @@ public class DemoAndQueryTests
     }
 
     [Fact]
+    public async Task User_detail_reports_the_share_of_the_org_pool()
+    {
+        await using var host = await SeededAsync();
+        var board = await host.QueryAsync(q => q.GetLeaderboardAsync());
+        var d = await host.QueryAsync(q => q.GetUserDetailAsync(board[0].Login));
+        Assert.Equal(47_500m, d!.PoolLimit);
+        Assert.Equal(board[0].ShareOfPoolPercent, d.ShareOfPoolPercent);
+    }
+
+    [Fact]
+    public async Task User_exists_for_seats_in_any_case_and_not_for_strangers()
+    {
+        await using var host = await SeededAsync();
+        var login = (await host.QueryAsync(q => q.GetLeaderboardAsync()))[0].Login;
+        Assert.True(await host.QueryAsync(q => q.UserExistsAsync(login)));
+        Assert.True(await host.QueryAsync(q => q.UserExistsAsync(login.ToUpperInvariant())));
+        var idle = (await host.QueryAsync(q => q.GetLeaderboardAsync())).Last().Login;
+        Assert.True(await host.QueryAsync(q => q.UserExistsAsync(idle)));      // a seat with no usage still exists
+        Assert.False(await host.QueryAsync(q => q.UserExistsAsync("nobody-here")));
+        Assert.False(await host.QueryAsync(q => q.UserExistsAsync("  ")));
+    }
+
+    [Fact]
     public async Task Queries_on_an_empty_database_return_zeroes_instead_of_throwing()
     {
         await using var host = new TestHost(Now);

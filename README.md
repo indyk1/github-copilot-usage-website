@@ -4,8 +4,20 @@ A .NET 10 Blazor dashboard showing how a GitHub organization consumes its monthl
 (Copilot Business: 1,900 credits per seat, pooled across the org, 1 credit = $0.01, reset 00:00 UTC on the 1st).
 See [PLAN.md](PLAN.md) for the full spec. A background job syncs GitHub data into SQLite; pages read only from SQLite.
 
-**Status: phase 2 (theme and home page).** Foundation (calculations, GitHub client, database, sync, demo data) plus the
-"glass and aurora" theme and the home page are done. The Users pages are "coming soon" stubs.
+**Status: phase 3 (users).** Foundation (calculations, GitHub client, database, sync, demo data), the "glass and aurora"
+theme, the home page, the Users table (`/users`) and the per-user drill-down (`/users/{login}`) are done. Azure hosting and
+the deploy pipeline are still to come.
+
+## Pages
+
+| Page | What it shows |
+|---|---|
+| `/` | Credit pool gauge, stat tiles, burn chart, model split, leaderboard |
+| `/users` | Every seat: credits, percent of fair share, prompts, acceptance rate, top model, last active. Search by login as you type; click a column header (or use the sort menu on a phone) to sort, click again to reverse. Default: credits, highest first. Seats with no usage are marked "No usage this month", never hidden. A starting view can be set in the address: `/users?q=chen&sort=prompts&dir=asc` (`sort` is one of `user`, `credits`, `fair`, `prompts`, `acceptance`, `model`, `active`) |
+| `/users/{login}` | Credits and cost (billed, against the fair share, with a daily estimate chart), model breakdown, feature and tool mix (activity counts, not cost), productivity signals. An unknown login gets a not-found page and an HTTP 404 |
+
+Billed figures (monthly total, credits per model) come from GitHub's billing data. The daily chart on a user page comes from
+the usage metrics signal and is labelled as an estimate because it will not add up exactly to the billed total.
 
 ## Run it in demo mode (no GitHub needed)
 

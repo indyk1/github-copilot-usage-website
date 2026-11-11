@@ -79,6 +79,8 @@ public sealed record ProductivityTotals(
 /// not queried per user per day. They will not sum exactly to <see cref="Credits"/>. Zero-filled for every day up to today.
 /// </param>
 /// <param name="MetricsCredits">Sum of <see cref="DailyCredits"/>.</param>
+/// <param name="PoolLimit">The org pool limit (seats x credits per seat) that <see cref="ShareOfPoolPercent"/> is measured against.</param>
+/// <param name="ShareOfPoolPercent">Billed credits as a percent of the pool limit; null when the pool is empty.</param>
 public sealed record UserDetail(
     BillingMonth Month,
     string Login,
@@ -101,4 +103,6 @@ public sealed record UserDetail(
     IReadOnlyList<ActivityItem> ByClient,
     IReadOnlyList<ActivityItem> ByLanguage,
     IReadOnlyList<ActivityItem> ByModel,
-    ProductivityTotals Productivity);
+    ProductivityTotals Productivity,
+    decimal PoolLimit,
+    decimal? ShareOfPoolPercent);

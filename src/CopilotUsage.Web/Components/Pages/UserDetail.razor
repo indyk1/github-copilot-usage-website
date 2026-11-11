@@ -1,9 +1,241 @@
 @page "/users/{Login}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using CopilotUsage.Data.Queries
+@using UserRecord = CopilotUsage.Data.Queries.UserDetail
+@inject IServiceScopeFactory Scopes
+@inject TimeProvider Time
+@inject ILogger<UserDetail> Logger
 
-<PageTitle>@Login · Copilot Usage</PageTitle>
+<PageTitle>@(_detail?.Login ?? (_notFound ? "User not found" : Login)) · Copilot Usage</PageTitle>
 
-<ComingSoon Title="@Login" Text="The per-user page (credits against fair share, models, features and productivity) arrives in the next phase." />
+<div class="detail">
+    <a class="back" href="/users"><Icon Name="arrow-left" Size="16" /> All users</a>
+
+    @if (_loadError is not null)
+    {
+        <div class="banner danger" role="alert">
+            <StatusBadge Tone="StatusBadge.BadgeTone.Danger" Text="Could not load" />
+            <p>@_loadError</p>
+            <button type="button" class="btn" @onclick="ReloadAsync">Try again</button>
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="skeleton" role="status" aria-label="Loading user"><div></div><div></div></div>
+    }
+    else if (_notFound)
+    {
+        <UserNotFound Login="@Login" />
+    }
+    else if (_detail is { } d)
+    {
+        var now = Time.GetUtcNow();
+        var noUsage = d.Credits <= 0m && d.Productivity.ActiveDays == 0 && d.MetricsCredits <= 0m;
+        var over = d.FairShare > 0m && d.Credits > d.FairShare;
+        var p = d.Productivity;
+
+        <header class="head">
+            <Avatar Login="@d.Login" Url="@d.AvatarUrl" Size="64" />
+            <div class="who">
+                <p class="eyebrow">User · @Fmt.Month(d.Month)</p>
+                <h1 title="@d.Login">@d.Login</h1>
+                <div class="chips">
+                    @if (d.Credits > 0m)
+                    {
+                        <span class="chip num"><Icon Name="users" Size="14" /> Rank @d.Rank of @d.RankedUsers by credits</span>
+                    }
+                    else
+                    {
+                        <span class="chip"><Icon Name="users" Size="14" /> Unranked, no credits used</span>
+                    }
+                    @if (over) { <StatusBadge Tone="StatusBadge.BadgeTone.Danger" Text="Over fair share" /> }
+                    @if (noUsage) { <StatusBadge Tone="StatusBadge.BadgeTone.Info" Icon="clock" Text="No usage this month" /> }
+                    @if (!d.SeatActive) { <StatusBadge Tone="StatusBadge.BadgeTone.Warn" Text="Seat ended" /> }
+                    @if (!string.IsNullOrWhiteSpace(d.AssigningTeam)) { <span class="chip">Team @d.AssigningTeam</span> }
+                </div>
+            </div>
+        </header>
+
+        @if (noUsage)
+        {
+            <div class="banner info" role="status">
+                <StatusBadge Tone="StatusBadge.BadgeTone.Info" Icon="clock" Text="No usage yet" />
+                <p>@(d.SeatActive ? "This person has a Copilot seat but no credits or activity have been recorded for them this month." : "No credits or activity have been recorded for this login this month.")
+                    @if (d.LastActivityAt is { } seen) { <span> Their seat was last active on @seen.UtcDateTime.ToString("d MMM yyyy").</span> }
+                </p>
+            </div>
+        }
+
+        @* ---------- 1. Credits and cost ---------- *@
+        <GlassCard aria-labelledby="credits-h" Tone="@(over ? GlassCard.CardTone.Danger : GlassCard.CardTone.Neutral)">
+            <SectionHeading Id="credits-h" Title="Credits and cost"
+                            Subtitle="Billed credits this month. The monthly total and the per-model figures are what GitHub bills." />
+            <div class="kpis">
+                <StatTile Label="Credits this month" Icon="coins" Class="credits-tile" Tone="@(over ? StatTile.StatTone.Danger : StatTile.StatTone.Neutral)">
+                    <Value><CountUp Value="d.Credits" Text="@Fmt.Credits(d.Credits)" /></Value>
+                    <Hint>
+                        <FairShareMeter Credits="@d.Credits" FairShare="@d.FairShare" Percent="@d.FairSharePercent" Label="@($"{d.Login}: credits against fair share")" />
+                    </Hint>
+                </StatTile>
+                <StatTile Label="Dollar value" Icon="dollar">
+                    <Value><CountUp Value="d.Dollars" Decimals="2" Prefix="$" Text="@Fmt.Dollars(d.Dollars)" /></Value>
+                    <Hint>@Fmt.Credits(d.Credits) credits at $0.01 each</Hint>
+                </StatTile>
+                <StatTile Label="Share of org pool" Icon="users">
+                    <Value><span class="num">@Fmt.Percent(d.ShareOfPoolPercent, 1)</span></Value>
+                    <Hint>of the organization's @Fmt.Credits(d.PoolLimit) credit pool</Hint>
+                </StatTile>
+            </div>
+
+            <p class="note"><Icon Name="info" Size="14" /> <span><strong>Fair share</strong> is @Fmt.Credits(d.FairShare) credits per user. It is this dashboard's benchmark, not a GitHub limit: the pool is shared by the whole organization.</span></p>
+
+            <div class="daily-head">
+                <h3>Credits per day</h3>
+                <StatusBadge Tone="StatusBadge.BadgeTone.Info" Text="Estimate" />
+            </div>
+            <p class="estimate">Daily figures come from GitHub's activity metrics, a signal rather than the bill, so they will not add up exactly to the billed total@(d.MetricsCredits > 0m ? $" (about {Fmt.Credits(d.MetricsCredits)} here, against {Fmt.Credits(d.Credits)} billed)" : "").</p>
+            @if (d.MetricsCredits <= 0m)
+            {
+                <p class="empty">No daily activity has been recorded this month.</p>
+            }
+            else
+            {
+                <DailyChart Days="d.DailyCredits" DaysInMonth="d.Month.DaysInMonth" />
+            }
+        </GlassCard>
+
+        @* ---------- 2. Model breakdown ---------- *@
+        <GlassCard aria-labelledby="models-h">
+            <SectionHeading Id="models-h" Title="Model breakdown" Subtitle="Credits per model are billed figures. Activity per model counts prompts and is not a cost." />
+            <div class="cols two">
+                <section aria-labelledby="models-credits-h">
+                    <h3 id="models-credits-h">Credits by model <span class="tag">billed</span></h3>
+                    @if (d.CreditsByModel.Count == 0)
+                    {
+                        <p class="empty">No billed credits this month.</p>
+                    }
+                    else
+                    {
+                        <ModelBars Models="_modelShares" />
+                    }
+                </section>
+                <section aria-labelledby="models-activity-h">
+                    <h3 id="models-activity-h">Activity by model <span class="tag">activity</span></h3>
+                    <ActivityBars Items="d.ByModel" Label="@(k => k ?? "Unknown")" EmptyText="No model activity recorded this month." />
+                </section>
+            </div>
+        </GlassCard>
+
+        @* ---------- 3. Feature and tool mix ---------- *@
+        <GlassCard aria-labelledby="mix-h">
+            <SectionHeading Id="mix-h" Title="Feature and tool mix"
+                            Subtitle="GitHub does not split credits by feature, so these are activity counts (prompts, suggestions or requests), not cost." />
+            <div class="cols three">
+                <section aria-labelledby="mix-feature-h">
+                    <h3 id="mix-feature-h">By feature</h3>
+                    <ActivityBars Items="d.ByFeature" Label="@Labels.Feature" MaxRows="8" EmptyText="No feature activity recorded this month." />
+                </section>
+                <section aria-labelledby="mix-ide-h">
+                    <h3 id="mix-ide-h">By IDE</h3>
+                    <ActivityBars Items="d.ByIde" Label="@Labels.Ide" EmptyText="No IDE activity recorded this month." />
+                </section>
+                <section aria-labelledby="mix-client-h">
+                    <h3 id="mix-client-h">By client</h3>
+                    <ActivityBars Items="d.ByClient" Label="@Labels.Client" EmptyText="No client activity recorded this month." />
+                </section>
+            </div>
+        </GlassCard>
+
+        @* ---------- 4. Productivity signals ---------- *@
+        <GlassCard aria-labelledby="prod-h">
+            <SectionHeading Id="prod-h" Title="Productivity signals" Subtitle="What this person did with Copilot this month, from GitHub's activity metrics." />
+            <div class="signals">
+                <StatTile Label="Prompts sent" Icon="coins">
+                    <Value><CountUp Value="p.Prompts" Text="@Fmt.Number(p.Prompts)" /></Value>
+                    <Hint>explicit prompts to chat, agents and the CLI</Hint>
+                </StatTile>
+                <StatTile Label="Acceptance rate" Icon="check">
+                    <Value><span class="num">@(p.AcceptanceRate is { } ar ? Fmt.Percent(ar * 100m, 1) : "–")</span></Value>
+                    <Hint>@(p.SuggestionsGenerated > 0 ? $"{Fmt.Number(p.SuggestionsAccepted)} accepted of {Fmt.Number(p.SuggestionsGenerated)} suggestions" : "No suggestions this month")</Hint>
+                </StatTile>
+                <StatTile Label="Lines added" Icon="arrow-up">
+                    <Value><CountUp Value="p.LocAdded" Text="@Fmt.Number(p.LocAdded)" /></Value>
+                    <Hint>@Fmt.Number(p.LocDeleted) deleted · @Fmt.Number(p.LocSuggestedToAdd) suggested</Hint>
+                </StatTile>
+                <StatTile Label="Active days" Icon="calendar">
+                    <Value><CountUp Value="p.ActiveDays" Text="@p.ActiveDays.ToString()" /><span class="unit">of @Fmt.Plural(d.DailyCredits.Count, "day")</span></Value>
+                    <Hint>Chat on @Fmt.Plural(p.ChatDays, "day"), agent mode on @Fmt.Plural(p.AgentDays, "day")</Hint>
+                </StatTile>
+                <StatTile Label="Last activity" Icon="clock">
+                    <Value><span class="when">@(LastActivity(d) is { } la ? Fmt.RelativeDay(la, now) : "Never")</span></Value>
+                    <Hint>@(LastActivity(d) is { } la2 ? la2.UtcDateTime.ToString("d MMM yyyy") + " (UTC)" : "No activity on record")</Hint>
+                </StatTile>
+            </div>
+
+            <h3 class="langs-h" id="langs-h">Languages <span class="tag">activity</span></h3>
+            <ActivityBars Items="d.ByLanguage" Label="@Labels.Language" MaxRows="8" EmptyText="No language activity recorded this month." />
+        </GlassCard>
+    }
+</div>
 
 @code {
     [Parameter] public string Login { get; set; } = "";
+
+    private UserRecord? _detail;
+    private IReadOnlyList<ModelShare> _modelShares = [];
+    private string? _loadedFor;
+    private string? _loadError;
+    private bool _loading = true;
+    private bool _notFound;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.Equals(_loadedFor, Login, StringComparison.Ordinal)) return;
+        _loadedFor = Login;
+        _loading = true;
+        _detail = null;
+        await LoadAsync();
+        _loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+            var queries = scope.ServiceProvider.GetRequiredService<UsageQueries>();
+            var detail = await queries.GetUserDetailAsync(Login);
+            _notFound = detail is null;
+            _detail = detail;
+            _modelShares = detail?.CreditsByModel.Select(m => new ModelShare(m.Model, m.Credits, m.Dollars, m.SharePercent)).ToList() ?? [];
+            _loadError = null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not load the detail for {Login}.", Login);
+            _loadError = "This user's figures could not be read from the database.";
+            _notFound = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        await LoadAsync();
+        _loading = false;
+    }
+
+    /// <summary>The later of the seat's last activity and the last day with metrics.</summary>
+    private static DateTimeOffset? LastActivity(UserRecord d)
+    {
+        DateTimeOffset? metrics = d.Productivity.LastActiveDay is { } day ? new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) : null;
+        return (d.LastActivityAt, metrics) switch
+        {
+            ({ } a, { } b) => a > b ? a : b,
+            ({ } a, null) => a,
+            (null, { } b) => b,
+            _ => null,
+        };
+    }
 }

@@ -1,0 +1,23 @@
+.daily { width: 100%; min-width: 0; }
+svg { width: 100%; height: auto; overflow: visible; }
+
+.s-top { stop-color: var(--blue); stop-opacity: 0.95; }
+.s-bottom { stop-color: var(--violet); stop-opacity: 0.75; }
+
+.grid { stroke: var(--grid-line); stroke-width: 1; }
+svg ::deep .axis { fill: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.bar { fill: url(#daily-bar); animation: rise var(--dur-sweep) var(--ease-out) both; transform-box: fill-box; transform-origin: bottom; }
+.zero { fill: var(--track-strong); }
+@keyframes rise { from { transform: scaleY(0); } }
+
+.hit { fill: transparent; cursor: crosshair; }
+.day { outline: none; }
+.day:focus-visible .guide { stroke: var(--focus); stroke-width: 2; }
+.reveal { opacity: 0; transition: opacity var(--dur-fast); }
+.day:hover .reveal, .day:focus .reveal { opacity: 1; }
+.guide { fill: rgba(255, 255, 255, 0.07); stroke: var(--glass-border-strong); stroke-width: 1; }
+.tip-box { fill: var(--glass-bg-solid); stroke: var(--glass-border-strong); stroke-width: 1; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.5)); }
+svg ::deep .tip-title { fill: var(--ink-0); font-size: 13px; font-weight: 700; }
+svg ::deep .tip-k { fill: var(--ink-1); font-size: 12px; }
+svg ::deep .tip-v { fill: var(--ink-0); font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; }

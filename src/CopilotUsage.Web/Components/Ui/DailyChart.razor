@@ -1,0 +1,146 @@
+@using CopilotUsage.Data.Queries
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@* Credits per day as bars, drawn as SVG in real pixels so axis text stays 12px on a phone. The axis spans the whole month;
+   days not reached yet are empty. Hover or keyboard focus on a day shows its figure (pure CSS, no round trip). *@
+<div class="daily" @ref="_host">
+    <svg viewBox="0 0 @N(_w) @N(_h)" role="group" aria-label="@Summary" focusable="false">
+        <defs>
+            <linearGradient id="daily-bar" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" class="s-top" /><stop offset="1" class="s-bottom" />
+            </linearGradient>
+        </defs>
+
+        @foreach (var t in _ticks)
+        {
+            <line class="grid" x1="@N(_left)" x2="@N(_right)" y1="@N(Y(t))" y2="@N(Y(t))" />
+            <SvgText Class="axis" X="@N(_left - 8)" Y="@N(Y(t) + 4)" Anchor="end">@Fmt.Compact(t)</SvgText>
+        }
+        @foreach (var d in _labelled)
+        {
+            <SvgText Class="axis" X="@N(X(d))" Y="@N(_h - 8)" Anchor="middle">@d</SvgText>
+        }
+
+        @for (var i = 0; i < Days.Count; i++)
+        {
+            var day = Days[i];
+            var dom = day.Day.Day;
+            var x = X(dom);
+            var barH = day.Credits > 0m ? Math.Max(2, _bottom - Y(day.Credits)) : 0;
+            var tipW = 150;
+            var tipH = 54;
+            var tipX = x + 14 + tipW > _w - 4 ? x - 14 - tipW : x + 14;
+            var tipY = Math.Max(_top, Math.Min(_bottom - tipH, _bottom - barH - tipH / 2));
+            <g class="day" tabindex="0" role="img" aria-label="@DayLabel(day)">
+                <rect class="hit" x="@N(x - _step / 2)" y="@N(_top)" width="@N(_step)" height="@N(_bottom - _top)" />
+                @if (barH > 0)
+                {
+                    <rect class="bar" x="@N(x - _barW / 2)" y="@N(_bottom - barH)" width="@N(_barW)" height="@N(barH)" rx="@N(Math.Min(3, _barW / 2))" />
+                }
+                else
+                {
+                    <rect class="zero" x="@N(x - _barW / 2)" y="@N(_bottom - 1.5)" width="@N(_barW)" height="1.5" />
+                }
+                <g class="reveal" pointer-events="none">
+                    <rect class="guide" x="@N(x - _step / 2)" y="@N(_top)" width="@N(_step)" height="@N(_bottom - _top)" />
+                    <g transform="translate(@N(tipX) @N(tipY))">
+                        <rect class="tip-box" width="@tipW" height="@tipH" rx="10" />
+                        <SvgText Class="tip-title" X="12" Y="21">@Fmt.DayMonth(day.Day)</SvgText>
+                        <SvgText Class="tip-k" X="12" Y="41">@(day.Credits > 0m ? "Estimated" : "No activity")</SvgText>
+                        @if (day.Credits > 0m)
+                        {
+                            <SvgText Class="tip-v" X="@(tipW - 12)" Y="41" Anchor="end">@Fmt.Credits(day.Credits)</SvgText>
+                        }
+                    </g>
+                </g>
+            </g>
+        }
+    </svg>
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
+    [Parameter, EditorRequired] public IReadOnlyList<DailyCredit> Days { get; set; } = [];
+    /// <summary>Length of the month, so the axis covers all of it and the bars keep their place as the month goes on.</summary>
+    [Parameter, EditorRequired] public int DaysInMonth { get; set; }
+
+    private ElementReference _host;
+    private DotNetObjectReference<DailyChart>? _self;
+    private bool _observing;
+
+    private double _w = 720, _h = 240;
+    private double _left = 46, _right = 700, _top = 12, _bottom = 212, _step = 20, _barW = 10;
+    private decimal _yMax = 1;
+    private IReadOnlyList<decimal> _ticks = [];
+    private List<int> _labelled = [];
+
+    private string N(double v) => v.ToString("0.##", Inv);
+    private int Slots => Math.Max(1, DaysInMonth);
+    private double X(int day) => _left + _step * (day - 0.5);
+    private double Y(decimal v) => ChartScale.Map((double)v, 0, (double)_yMax, _bottom, _top);
+
+    protected override void OnParametersSet() => Layout();
+
+    [JSInvokable]
+    public void OnWidth(double width)
+    {
+        if (Math.Abs(width - _w) < 1) return;
+        _w = width;
+        Layout();
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _observing) return;
+        _observing = true;
+        _self = DotNetObjectReference.Create(this);
+        try { await JS.InvokeVoidAsync("glass.observeWidth", _host, _self); }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or InvalidOperationException or TaskCanceledException) { /* keep the default width */ }
+    }
+
+    private void Layout()
+    {
+        var narrow = _w < 480;
+        _h = narrow ? 210 : 240;
+        _left = narrow ? 38 : 46;
+        _right = _w - (narrow ? 6 : 12);
+        _top = 12;
+        _bottom = _h - 28;
+        _step = (_right - _left) / Slots;
+        _barW = Math.Max(3, Math.Min(18, _step * 0.62));
+
+        var max = Days.Select(d => d.Credits).DefaultIfEmpty(0m).Max();
+        _ticks = ChartScale.NiceTicks(max * 1.08m, 3);
+        _yMax = _ticks[^1];
+
+        var k = new[] { 1, 5, 10 }.First(c => _step * c >= 40 || c == 10);
+        _labelled = Enumerable.Range(1, Slots).Where(d => d == 1 || (d % k == 0 && Slots - d >= k / 2.0)).ToList();
+    }
+
+    private static string DayLabel(DailyCredit d) =>
+        d.Credits > 0m ? $"{Fmt.DayMonth(d.Day)}: about {Fmt.Credits(d.Credits)} credits (estimate)." : $"{Fmt.DayMonth(d.Day)}: no activity.";
+
+    private string Summary
+    {
+        get
+        {
+            var total = Days.Sum(d => d.Credits);
+            var peak = Days.Count == 0 ? null : Days.MaxBy(d => d.Credits);
+            return total <= 0m
+                ? "Estimated credits per day: no activity recorded this month."
+                : $"Estimated credits per day, about {Fmt.Credits(total)} in total. Busiest day {Fmt.DayMonth(peak!.Day)} with about {Fmt.Credits(peak.Credits)}. Each day can be focused for its figure.";
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_observing)
+        {
+            try { await JS.InvokeVoidAsync("glass.unobserveWidth", _host); }
+            catch (Exception ex) when (ex is JSException or JSDisconnectedException or InvalidOperationException or TaskCanceledException) { }
+        }
+        _self?.Dispose();
+    }
+}

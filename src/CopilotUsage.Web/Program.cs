@@ -1,6 +1,7 @@
 using CopilotUsage.Core;
 using CopilotUsage.Data;
 using CopilotUsage.Data.Entities;
+using CopilotUsage.Data.Queries;
 using CopilotUsage.GitHub;
 using CopilotUsage.Web.Components;
 using CopilotUsage.Web.Config;
@@ -61,6 +62,31 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
 app.UseAntiforgery();
+
+// The user page renders in the browser over the circuit, so the server cannot see a missing login from the page itself.
+// Answer a direct page request for an unknown login with a real 404 (the status code pages above show the not-found page).
+app.Use(async (ctx, next) =>
+{
+    if (HttpMethods.IsGet(ctx.Request.Method)
+        && ctx.Request.Path.StartsWithSegments("/users", out var rest)
+        && rest.Value?.Trim('/') is { Length: > 0 } login && !login.Contains('/')
+        && ctx.Request.Headers.Accept.ToString().Contains("text/html", StringComparison.OrdinalIgnoreCase))
+    {
+        bool exists;
+        try { exists = await ctx.RequestServices.GetRequiredService<UsageQueries>().UserExistsAsync(login, ct: ctx.RequestAborted); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            app.Logger.LogError(ex, "Could not check whether {Login} exists; serving the page so it can show its own error.", login);
+            exists = true;
+        }
+        if (!exists)
+        {
+            ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+    }
+    await next();
+});
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
