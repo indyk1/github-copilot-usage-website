@@ -3,11 +3,13 @@ using CopilotUsage.Data;
 using CopilotUsage.Data.Entities;
 using CopilotUsage.Data.Queries;
 using CopilotUsage.GitHub;
+using CopilotUsage.Web.Auth;
 using CopilotUsage.Web.Components;
 using CopilotUsage.Web.Config;
 using CopilotUsage.Web.Health;
 using CopilotUsage.Web.Hosting;
 using CopilotUsage.Web.Sync;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
@@ -15,7 +17,7 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var configErrors = StartupConfigValidator.Validate(builder.Configuration);
+var configErrors = StartupConfigValidator.Validate(builder.Configuration, builder.Environment.IsDevelopment());
 if (configErrors.Count > 0)
 {
     Console.Error.WriteLine("Configuration is invalid, refusing to start:");
@@ -27,12 +29,16 @@ builder.Services.Configure<GitHubOptions>(builder.Configuration.GetSection(GitHu
 builder.Services.Configure<CopilotOptions>(builder.Configuration.GetSection(CopilotOptions.SectionName));
 builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection(SyncOptions.SectionName));
 builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOptions.SectionName));
+builder.Services.Configure<AzureAdOptions>(builder.Configuration.GetSection(AzureAdOptions.SectionName));
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddCopilotUsageData(ResolveConnectionString(builder));
 builder.Services.AddGitHubClient();
 builder.Services.AddSingleton<ISyncService, SyncService>();
-builder.Services.AddHostedService<SyncWorker>();
+// Production scheduler is the Azure Function calling POST /api/sync (the app sleeps on the Free plan). The in-process timer is for local runs.
+var inAppTimer = builder.Configuration.GetSection(SyncOptions.SectionName).Get<SyncOptions>()?.InAppTimer == true;
+if (inAppTimer) builder.Services.AddHostedService<SyncWorker>();
+builder.Services.AddDashboardAuth(builder.Configuration, builder.Environment);
 
 // App Service terminates TLS in its front end and forwards over plain http with X-Forwarded-* headers. Its front-end
 // addresses are not fixed, so no proxy list is configured; the site is only reachable through that front end.
@@ -50,6 +56,11 @@ builder.Services.AddRazorComponents()
 
 var app = builder.Build();
 
+var authEnabled = app.Services.GetRequiredService<AuthMode>().Enabled;
+if (authEnabled) app.Logger.LogInformation("Sign-in with Microsoft Entra ID is required.");
+else app.Logger.LogWarning("Sign-in is switched off (Auth:Enabled=false, Development only). Everything, including POST /api/sync, is open.");
+app.Logger.LogInformation(inAppTimer ? "In-app sync timer is on (Sync:InAppTimer)." : "In-app sync timer is off; syncs run when POST /api/sync is called.");
+
 var demo = app.Configuration.GetSection(DemoOptions.SectionName).Get<DemoOptions>()?.Enabled == true;
 if (demo)
     app.Logger.LogInformation("Demo mode (scenario: {Scenario}): GitHub is not contacted; the database is filled with synthetic data.",
@@ -64,6 +75,7 @@ await using (var scope = app.Services.CreateAsyncScope())
     await db.Database.MigrateAsync();
     // Azure App Service keeps SQLite on a network share: stay in the default rollback journal, not WAL.
     await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=DELETE;");
+    await SyncRecovery.CloseInterruptedRunsAsync(db, app.Services.GetRequiredService<TimeProvider>(), app.Logger);
 
     // Demo data and real data must never mix. Judged from the sync log stored in the database, not from file names.
     var origin = await DatabaseOrigin.GetAsync(db);
@@ -90,8 +102,11 @@ if (!app.Environment.IsDevelopment())
     // The health probe may arrive over plain http from inside App Service; it must get an answer, not a redirect.
     app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/healthz"), b => b.UseHttpsRedirection());
 }
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+// Page-style error pages are for pages; the API answers with a bare status code.
+app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/api"), b => b.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 // The user page renders in the browser over the circuit, so the server cannot see a missing login from the page itself.
@@ -125,9 +140,18 @@ app.MapGet("/healthz", async (HttpContext ctx, UsageQueries queries, IOptions<Sy
     var report = await HealthReporter.BuildAsync(queries, sync.Value, demoOptions.Value, time, ctx.RequestAborted);
     ctx.Response.Headers.CacheControl = "no-store";
     return Results.Json(report, statusCode: report.IsServing ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
-}).DisableAntiforgery();
+}).DisableAntiforgery().AllowAnonymous();
 
-app.MapStaticAssets();
+// Sign-out: a POST from the header form. The cookie is SameSite=Lax, so a cross-site POST arrives without it and signs nobody out.
+// OpenID Connect sign-out then sends the browser to Entra and back to /signed-out.
+app.MapPost(AuthSetup.SignOutPath, (HttpContext ctx) => authEnabled
+    ? Results.SignOut(new AuthenticationProperties { RedirectUri = AuthSetup.SignedOutPath }, [AuthSetup.CookieScheme, AuthSetup.OidcScheme])
+    : Results.Redirect("/")).DisableAntiforgery().AllowAnonymous();
+
+app.MapSyncApi(authEnabled);
+
+// Public on purpose: the signed-out and access-denied pages need their styles and scripts without a session.
+app.MapStaticAssets().AllowAnonymous();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

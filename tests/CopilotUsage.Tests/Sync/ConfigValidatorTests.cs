@@ -7,9 +7,9 @@ public class ConfigValidatorTests
 {
     private static IReadOnlyList<string> Validate(params (string Key, string? Value)[] values) =>
         StartupConfigValidator.Validate(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Default"] = "Data Source=x.db" }
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Default"] = "Data Source=x.db", ["Auth:Enabled"] = "false" }
                 .Concat(values.Select(v => new KeyValuePair<string, string?>(v.Key, v.Value))).ToDictionary())
-            .Build());
+            .Build(), isDevelopment: true);
 
     [Fact]
     public void Demo_mode_needs_no_github_settings() =>

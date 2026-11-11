@@ -21,42 +21,6 @@ using Microsoft.Extensions.Options;
 
 namespace CopilotUsage.Tests.Web;
 
-/// <summary>The whole app host (real middleware, demo data in a temp SQLite file), driven over an in-process server.</summary>
-public sealed class AppFactory : WebApplicationFactory<Program>
-{
-    private readonly string _env;
-    private readonly Dictionary<string, string?> _settings;
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "copilot-usage-tests-" + Guid.NewGuid().ToString("N"));
-
-    public AppFactory(string env = "Production", Dictionary<string, string?>? settings = null)
-    {
-        _env = env;
-        Directory.CreateDirectory(_dir);
-        _settings = new()
-        {
-            ["Demo:Enabled"] = "true",
-            ["ConnectionStrings:Default"] = $"Data Source={Path.Combine(_dir, "t.db")}",
-        };
-        foreach (var kv in settings ?? []) _settings[kv.Key] = kv.Value;
-    }
-
-    protected override void ConfigureWebHost(IWebHostBuilder builder)
-    {
-        builder.UseEnvironment(_env);
-        foreach (var kv in _settings) builder.UseSetting(kv.Key, kv.Value);
-    }
-
-    public HttpClient Client(string host = "dashboard.example.test", bool followRedirects = false) =>
-        CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = followRedirects, BaseAddress = new Uri($"http://{host}/") });
-
-    protected override void Dispose(bool disposing)
-    {
-        base.Dispose(disposing);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        try { Directory.Delete(_dir, true); } catch (IOException) { }
-    }
-}
-
 public class HealthEndpointTests
 {
     [Fact]
@@ -99,6 +63,7 @@ public class HealthEndpointTests
         var unknown = new HttpRequestMessage(HttpMethod.Get, "/users/nobody-here");
         unknown.Headers.Accept.ParseAdd("text/html");
         unknown.Headers.Add("X-Forwarded-Proto", "https"); // as App Service sends it; otherwise Production redirects first
+        unknown.Headers.Add("Cookie", app.SignedInCookie()); // pages need a signed-in user; /healthz above did not
         Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(unknown)).StatusCode);
     }
 }
@@ -204,6 +169,8 @@ public class SecurityHeaderTests
         Assert.Contains("connect-src 'self'", csp);   // includes the Blazor Server websocket
         Assert.Contains("https://avatars.githubusercontent.com", csp);
         Assert.Contains("https://github.com", csp);   // demo identicons
+        var formAction = Regex.Match(csp, @"form-action [^;]*").Value;
+        Assert.Equal("form-action 'self' https://login.microsoftonline.com", formAction); // sign-out redirects there; nothing else may receive a form
         Assert.Contains("object-src 'none'", csp);
         var script = Regex.Match(csp, @"script-src [^;]*").Value;
         Assert.DoesNotContain("unsafe", script);
@@ -218,7 +185,8 @@ public class SecurityHeaderTests
         var nonces = new List<string>();
         for (var i = 0; i < 2; i++)
         {
-            var res = await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/") { Headers = { { "X-Forwarded-Proto", "https" } } });
+            var res = await client.SendAsync(AppFactory.Request(HttpMethod.Get, "/", cookie: app.SignedInCookie()));
+            Assert.Equal(HttpStatusCode.OK, res.StatusCode);
             var html = await res.Content.ReadAsStringAsync();
             var csp = res.Headers.GetValues("Content-Security-Policy").Single();
             var inCsp = Regex.Match(csp, @"'nonce-([^']+)'").Groups[1].Value;
@@ -261,7 +229,8 @@ public class ProxyAndHttpsTests
     public async Task Production_behind_the_proxy_trusts_forwarded_proto_and_sends_hsts()
     {
         using var app = new AppFactory("Production");
-        var req = new HttpRequestMessage(HttpMethod.Get, "/") { Headers = { { "X-Forwarded-Proto", "https" }, { "X-Forwarded-For", "203.0.113.7" } } };
+        var req = AppFactory.Request(HttpMethod.Get, "/", cookie: app.SignedInCookie());
+        req.Headers.Add("X-Forwarded-For", "203.0.113.7");
         var res = await app.Client().SendAsync(req);
 
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
@@ -311,13 +280,23 @@ public class ProductionConfigTests
         var c = Load("Development");
         Assert.Equal("Data Source=data/copilot-usage.db", c.GetConnectionString("Default"));
         Assert.True(c.GetValue<bool>("Demo:Enabled"));
+        Assert.False(c.GetValue<bool>("Auth:Enabled"));
+    }
+
+    [Fact]
+    public void Production_files_never_switch_sign_in_off_or_the_timer_on()
+    {
+        var c = Load("Production");
+        Assert.Null(c["Auth:Enabled"]);
+        Assert.False(c.GetValue<bool>("Sync:InAppTimer"));
     }
 
     [Fact]
     public void Production_refuses_to_start_without_an_org_and_token_but_otherwise_validates()
     {
-        Assert.Equal(2, StartupConfigValidator.Validate(Load("Production")).Count);
-        Assert.Empty(StartupConfigValidator.Validate(Load("Production", ("GitHub:Org", "acme"), ("GitHub:Token", "t"))));
+        Assert.Equal(5, StartupConfigValidator.Validate(Load("Production"), isDevelopment: false).Count); // org, token, tenant, client, caller
+        Assert.Empty(StartupConfigValidator.Validate(Load("Production", ("GitHub:Org", "acme"), ("GitHub:Token", "t"),
+            ("AzureAd:TenantId", TestIds.Tenant), ("AzureAd:ClientId", TestIds.ClientId), ("Sync:AllowedCallerObjectId", TestIds.FunctionOid)), isDevelopment: false));
     }
 
     [Fact]
@@ -331,7 +310,8 @@ public class ProductionConfigTests
     public void An_unresolved_key_vault_reference_is_rejected_with_an_explanation()
     {
         var errors = StartupConfigValidator.Validate(Load("Production", ("GitHub:Org", "acme"),
-            ("GitHub:Token", "@Microsoft.KeyVault(SecretUri=https://example.vault.azure.net/secrets/x/)")));
+            ("AzureAd:TenantId", TestIds.Tenant), ("AzureAd:ClientId", TestIds.ClientId), ("Sync:AllowedCallerObjectId", TestIds.FunctionOid),
+            ("GitHub:Token", "@Microsoft.KeyVault(SecretUri=https://example.vault.azure.net/secrets/x/)")), isDevelopment: false);
         Assert.Contains("Key Vault reference", Assert.Single(errors));
     }
 }

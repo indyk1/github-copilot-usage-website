@@ -18,6 +18,8 @@ public static class SecurityHeaders
     /// Everything comes from this origin, except avatar images (GitHub avatar hosts; data: for inline placeholders).
     /// Inline styles are allowed because the components set CSS custom properties with style attributes. Inline scripts are
     /// not, apart from the framework's import map, which carries a per-request nonce.
+    /// The sign-out form posts to this origin, which answers with a redirect to login.microsoftonline.com: Chromium applies form-action to that
+    /// redirect, so the login host is listed (sign-in itself is a plain navigation, and the post back is made by Microsoft's page).
     /// Blazor Server's websocket is same-origin, covered by connect-src 'self'.
     /// </summary>
     public const string DefaultCsp =
@@ -29,7 +31,7 @@ public static class SecurityHeaders
         "connect-src 'self'; " +
         "object-src 'none'; " +
         "base-uri 'self'; " +
-        "form-action 'self'; " +
+        "form-action 'self' https://login.microsoftonline.com; " +
         "frame-ancestors 'none'";
 
     /// <summary>The policy to send: the built-in default when <c>Security:ContentSecurityPolicy</c> is unset, a custom one when set, or null (no header) when set to an empty string.</summary>

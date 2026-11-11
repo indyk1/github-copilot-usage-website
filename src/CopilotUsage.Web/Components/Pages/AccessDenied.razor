@@ -1,0 +1,15 @@
+@page "/access-denied"
+@attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Access denied · Copilot Usage</PageTitle>
+
+<GlassCard Class="ad" aria-labelledby="ad-h">
+    <Icon Name="shield" Size="28" />
+    <h1 id="ad-h">Access denied</h1>
+    <p>This dashboard is only for people in this company's Microsoft account directory. The account you used could not be signed in here, for example because it belongs to another organization.</p>
+    <p>Sign in with your work account. If you believe you should have access, tell whoever runs this dashboard.</p>
+    <div class="actions">
+        <a class="btn btn-primary" href="/">Try again</a>
+    </div>
+</GlassCard>

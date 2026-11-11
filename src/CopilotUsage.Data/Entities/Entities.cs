@@ -99,7 +99,7 @@ public class UserMetricBreakdown
     public string? Version { get; set; }
 }
 
-public enum SyncTrigger { Startup, Scheduled, Manual, Demo }
+public enum SyncTrigger { Startup, Scheduled, Manual, Demo, Api }
 
 public enum SyncStatus { Running, Succeeded, PartialFailure, Failed }
 

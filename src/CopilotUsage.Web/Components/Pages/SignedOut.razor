@@ -1,0 +1,14 @@
+@page "/signed-out"
+@attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Signed out · Copilot Usage</PageTitle>
+
+<GlassCard Class="so" aria-labelledby="so-h">
+    <Icon Name="log-out" Size="28" />
+    <h1 id="so-h">You have signed out</h1>
+    <p>You are signed out of the Copilot Usage dashboard. Close this window, or sign in again with your work account.</p>
+    <div class="actions">
+        <a class="btn btn-primary" href="/">Sign in again</a>
+    </div>
+</GlassCard>

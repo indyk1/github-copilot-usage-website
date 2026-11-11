@@ -45,8 +45,8 @@ public class DemoScenarioTests
             {
                 ["Demo:Enabled"] = "true", ["Demo:Scenario"] = scenario,
                 ["GitHub:BaseUrl"] = "https://api.github.com/", ["ConnectionStrings:Default"] = "Data Source=x.db",
-                ["Copilot:CreditsPerSeat"] = "1900", ["Sync:IntervalHours"] = "4",
-            }).Build());
+                ["Copilot:CreditsPerSeat"] = "1900", ["Sync:IntervalHours"] = "4", ["Auth:Enabled"] = "false",
+            }).Build(), isDevelopment: true);
         Assert.Empty(Validate("over"));
         Assert.Empty(Validate("empty"));
         Assert.Contains(Validate("busy"), e => e.Contains("Demo:Scenario") && e.Contains("over"));

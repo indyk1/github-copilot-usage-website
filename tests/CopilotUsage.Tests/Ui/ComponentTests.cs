@@ -13,12 +13,60 @@ public class ComponentTests : BunitContext
 {
     private static PoolSummary Pool(decimal used) => PoolCalculator.Summarize(25, 1900m, used);
 
+    private IRenderedComponent<CopilotUsage.Web.Components.Layout.MainLayout> RenderLayout(bool signInEnabled, string? user = null, params System.Security.Claims.Claim[] claims)
+    {
+        Services.AddSingleton(Options.Create(new CopilotUsage.Web.Config.DemoOptions()));
+        Services.AddSingleton(new CopilotUsage.Web.Config.AuthMode(signInEnabled));
+        var auth = AddAuthorization();
+        if (user is not null) auth.SetAuthorized(user).SetClaims(claims);
+        return Render<CopilotUsage.Web.Components.Layout.MainLayout>(p => p.Add(x => x.Body, (RenderFragment)(b => b.AddContent(0, "x"))));
+    }
+
     [Fact]
     public void Footer_shows_the_deployed_version()
     {
-        Services.AddSingleton(Options.Create(new CopilotUsage.Web.Config.DemoOptions()));
-        var cut = Render<CopilotUsage.Web.Components.Layout.MainLayout>(p => p.Add(x => x.Body, (RenderFragment)(b => b.AddContent(0, "x"))));
+        var cut = RenderLayout(signInEnabled: false);
         Assert.Contains("Version " + CopilotUsage.Web.AppVersion.Full, cut.Find("footer .ver").TextContent);
+    }
+
+    [Fact]
+    public void Header_says_so_when_sign_in_is_switched_off_and_has_no_sign_out()
+    {
+        var cut = RenderLayout(signInEnabled: false);
+        Assert.Contains("No sign-in", cut.Find(".topbar .nosignin").TextContent);
+        Assert.Empty(cut.FindAll("form[action='/auth/signout']"));
+    }
+
+    [Fact]
+    public void Header_shows_who_is_signed_in_and_a_sign_out_form_that_posts()
+    {
+        var cut = RenderLayout(true, "ada", new System.Security.Claims.Claim("name", "Ada Lovelace"), new System.Security.Claims.Claim("preferred_username", "ada@example.test"));
+        Assert.Equal("Ada Lovelace", cut.Find(".who-name span").TextContent);
+        Assert.Equal("ada@example.test", cut.Find(".who-name").GetAttribute("title"));
+        var form = cut.Find("form[action='/auth/signout']");
+        Assert.Equal("post", form.GetAttribute("method"));
+        Assert.Contains("Sign out", form.TextContent);
+        Assert.Empty(cut.FindAll(".nosignin"));
+    }
+
+    [Fact]
+    public void Header_shows_nothing_for_an_unauthenticated_visitor_when_sign_in_is_on()
+    {
+        var cut = RenderLayout(true);
+        Assert.Empty(cut.FindAll(".who"));
+        Assert.Empty(cut.FindAll(".nosignin"));
+    }
+
+    [Fact]
+    public void Signed_out_and_access_denied_pages_are_themed_and_offer_a_way_back()
+    {
+        var so = Render<CopilotUsage.Web.Components.Pages.SignedOut>();
+        Assert.Equal("You have signed out", so.Find("h1").TextContent);
+        Assert.Equal("/", so.Find("a.btn-primary").GetAttribute("href"));
+        var ad = Render<CopilotUsage.Web.Components.Pages.AccessDenied>();
+        Assert.Equal("Access denied", ad.Find("h1").TextContent);
+        Assert.Equal("/", ad.Find("a.btn-primary").GetAttribute("href"));
+        Assert.Contains("another organization", ad.Markup);
     }
 
     [Fact]
