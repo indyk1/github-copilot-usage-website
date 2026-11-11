@@ -140,13 +140,19 @@ az webapp restart -g rg-copilot-usage -n <webAppName>
 
 You need **Key Vault Secrets Officer** on the vault for that command. Without the restart the app picks the new version up within about a day. Then press Refresh on the home page and check that no sync banner appears. Revoke the old token on GitHub.
 
-**Demo mode.** Demo mode shows synthetic data and never calls GitHub, but it **deletes the usage tables of the database it points at** before filling them. Never switch the live database to demo. To show demo data, point it at a separate file:
+**Demo mode.** Demo mode shows synthetic data and never calls GitHub. The app protects real data from it, judging by the sync log stored inside the database (each run records whether it was demo), not by file names:
+
+- **Demo on, database holds data from a real sync:** the app **refuses to start** and prints how to fix it (`Demo__Enabled=false`, or point `ConnectionStrings__Default` at a separate file). Nothing is deleted. The Refresh button is refused the same way and shows a "Sync failed" banner with that message. Data with no sync log at all is treated as real.
+- **Demo on, database empty or holding only demo data:** it is filled (or re-filled) with demo data, as before.
+- **Demo off, database holds only demo data:** at startup the app clears the demo seats, usage and demo sync runs (a warning line in the log says so), so synthetic users never appear beside real ones; the first real sync then fills it.
+
+To show demo data on the same web app, use a separate file anyway:
 
 ```bash
 az webapp config appsettings set -g rg-copilot-usage -n <webAppName> --settings Demo__Enabled=true "ConnectionStrings__Default=Data Source=/home/data/demo.db"
 ```
 
-(`Demo__Scenario` can be `normal`, `over` or `empty`.) A "Demo data" badge appears in the header. To go back, set `Demo__Enabled=false` and `ConnectionStrings__Default=Data Source=/home/data/copilot-usage.db`. Re-running section 2 also restores the template's values.
+(`Demo__Scenario` can be `normal`, `over` or `empty`.) A "Demo data" badge appears in the header. To go back, set `Demo__Enabled=false` and `ConnectionStrings__Default=Data Source=/home/data/copilot-usage.db`. Re-running section 2 also restores the template's values. If the app will not start after a settings change, read the log stream (section 6).
 
 **Settings you can change** without code: `GitHub__Org`, `Copilot__CreditsPerSeat`, `Sync__IntervalHours` (section 2, or Configuration in the portal). The app refuses to start, with the reason in the log stream, if the organization or token is missing or if the token is still the unresolved text `@Microsoft.KeyVault(...)`: in that case check that the web app's managed identity has the *Key Vault Secrets User* role on the vault and that the setting shows a green tick under Configuration.
 

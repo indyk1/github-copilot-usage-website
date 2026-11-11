@@ -48,6 +48,15 @@ public sealed class SyncService(
     private async Task<SyncResult> RunCoreAsync(SyncTrigger trigger, CancellationToken ct)
     {
         var isDemo = demo.Value.Enabled;
+        if (isDemo && await HoldsRealDataAsync(ct))
+        {
+            // Demo seeding deletes what it finds. Never do that to real data, whoever asked (startup or the Refresh button).
+            logger.LogError("{Message}", DatabaseOrigin.DemoOnRealDataMessage);
+            var refusedId = await CreateRunAsync(trigger, true, ct);
+            var refused = new SyncStepResult("DemoSeed", SyncStatus.Failed, 0, 1, DatabaseOrigin.DemoOnRealDataMessage);
+            await FinishRunAsync(refusedId, SyncStatus.Failed, [refused], DatabaseOrigin.DemoOnRealDataMessage);
+            return new SyncResult(refusedId, SyncStatus.Failed, false, [refused]);
+        }
         var runId = await CreateRunAsync(trigger, isDemo, ct);
         var steps = new List<SyncStepResult>();
 
@@ -83,6 +92,13 @@ public sealed class SyncService(
     }
 
     // ---- steps ----
+
+    private async Task<bool> HoldsRealDataAsync(CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CopilotUsageDbContext>();
+        return await DatabaseOrigin.GetAsync(db, ct) == DataOrigin.Real;
+    }
 
     private sealed record StepOutcome(int Rows, int Errors, string? FirstError);
 

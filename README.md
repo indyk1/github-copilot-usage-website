@@ -51,7 +51,7 @@ read [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md) before pointing this at 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Demo:Enabled` | `false` (`true` in Development) | Skip GitHub, seed demo data |
+| `Demo:Enabled` | `false` (`true` in Development) | Skip GitHub, seed demo data. Refused (startup and Refresh) if the database holds data from a real sync; see below |
 | `Demo:Scenario` | `normal` | Demo dataset: `normal` (about half the pool), `over` (pool exhausted with overage), `empty` (seats, no usage yet) |
 | `GitHub:Org` | none | Organization login (required unless demo) |
 | `GitHub:Token` | none | Access token, configuration only (required unless demo) |
@@ -66,6 +66,18 @@ read [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md) before pointing this at 
 Environment variables use `__` as the separator (`GitHub__Org`). `appsettings.Production.json` (committed, no secrets) sets the
 App Service database path, demo off and quieter log levels (HttpClient at Warning). The token is only ever read from
 configuration and the app refuses to start with an unresolved `@Microsoft.KeyVault(...)` text in its place.
+
+## Demo data and real data never mix
+
+Demo seeding replaces whatever usage data it finds, so the app checks first, using the sync log stored in the database
+(each run records whether it was demo), never file names:
+
+- Demo on and the database holds a real sync (or data with no sync log): the app **refuses to start**, names the problem and
+  the fix (`Demo__Enabled=false`, or a separate `ConnectionStrings__Default` file). The Refresh button is refused too.
+  Nothing is deleted.
+- Demo on and the database is empty or demo-only: seeded as usual.
+- Demo off and the database holds only demo data: the demo rows and demo sync runs are cleared at startup (logged), so
+  synthetic users never appear beside real ones.
 
 ## Production behaviour
 

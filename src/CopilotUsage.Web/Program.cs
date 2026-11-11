@@ -64,6 +64,19 @@ await using (var scope = app.Services.CreateAsyncScope())
     await db.Database.MigrateAsync();
     // Azure App Service keeps SQLite on a network share: stay in the default rollback journal, not WAL.
     await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=DELETE;");
+
+    // Demo data and real data must never mix. Judged from the sync log stored in the database, not from file names.
+    var origin = await DatabaseOrigin.GetAsync(db);
+    if (demo && origin == DataOrigin.Real)
+    {
+        Console.Error.WriteLine("Refusing to start: " + DatabaseOrigin.DemoOnRealDataMessage);
+        return 1;
+    }
+    if (!demo && origin == DataOrigin.DemoOnly)
+    {
+        app.Logger.LogWarning("The database holds only demo data and demo mode is off. Clearing the demo data (seats, usage and demo sync runs) so synthetic users never appear beside real ones; the first real sync refills it.");
+        await DatabaseOrigin.ClearDemoAsync(db);
+    }
 }
 if (demo)
     await app.Services.GetRequiredService<ISyncService>().RunAsync(SyncTrigger.Demo);
