@@ -1,0 +1,127 @@
+# Infrastructure (Terraform). Run it by hand, or automatically when infra/ changes on main.
+#   Stage Plan:  fmt -check, init against the hand-made state account, validate, plan (shown in the log, saved as an artifact).
+#   Stage Apply: applies exactly that saved plan, only after a person approves the environment 'copilot-usage-infrastructure'
+#                (Pipelines > Environments > that environment > Approvals and checks). Only on main.
+# Authentication: an Azure Resource Manager service connection using workload identity federation (no secret).
+# Variables: the variable group 'copilot-usage' (docs/DEPLOY.md, step 3).
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - infra/*
+      - azure-pipelines/infrastructure.yml
+      - azure-pipelines/scripts/*
+      - azure-pipelines/templates/terraform-setup.yml
+
+pr: none
+
+variables:
+  - group: copilot-usage
+
+pool:
+  vmImage: ubuntu-24.04
+
+stages:
+  - stage: Plan
+    displayName: Plan
+    jobs:
+      - job: PlanJob
+        displayName: Terraform plan
+        timeoutInMinutes: 30
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - template: templates/check-variables.yml
+            parameters:
+              names:
+                - AZURE_SERVICE_CONNECTION
+                - TFSTATE_STORAGE_ACCOUNT
+                - TFSTATE_CONTAINER
+                - TFSTATE_KEY
+                - TF_RESOURCE_GROUP
+                - TF_NAME_PREFIX
+                - TF_GITHUB_ORG
+                - TF_ENTRA_TENANT_ID
+                - TF_ENTRA_CLIENT_ID
+
+          - template: templates/terraform-setup.yml
+
+          - bash: terraform fmt -check -recursive -diff
+            displayName: terraform fmt -check
+            workingDirectory: infra
+
+          - task: AzureCLI@2
+            name: plan
+            displayName: terraform init, validate, plan
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: bash
+              scriptLocation: scriptPath
+              scriptPath: $(Build.SourcesDirectory)/azure-pipelines/scripts/terraform-plan.sh
+              workingDirectory: $(Build.SourcesDirectory)/infra
+            env:
+              SCRIPTS_DIR: $(Build.SourcesDirectory)/azure-pipelines/scripts
+
+          # The plan file plus the configuration it was made from (without provider downloads), so Apply uses exactly this.
+          - bash: |
+              set -euo pipefail
+              dest="$(Build.ArtifactStagingDirectory)/tfplan/infra"
+              mkdir -p "$dest"
+              (cd infra && tar --exclude=./.terraform --exclude=./tests -cf - .) | tar -xf - -C "$dest"
+              ls -la "$dest"
+            displayName: Collect the plan
+            condition: and(succeeded(), eq(variables['plan.hasChanges'], 'true'))
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish the plan
+            condition: and(succeeded(), eq(variables['plan.hasChanges'], 'true'))
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/tfplan
+              artifact: tfplan
+
+  - stage: Apply
+    displayName: Apply (needs approval)
+    dependsOn: Plan
+    condition: >-
+      and(succeeded(),
+          eq(variables['Build.SourceBranch'], 'refs/heads/main'),
+          eq(dependencies.Plan.outputs['PlanJob.plan.hasChanges'], 'true'))
+    jobs:
+      - deployment: ApplyJob
+        displayName: Terraform apply
+        timeoutInMinutes: 60
+        # The approval lives on this environment, so a person must approve before any step below runs.
+        environment: copilot-usage-infrastructure
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # The deployment job downloads the plan artifact to $(Pipeline.Workspace)/tfplan automatically.
+                # The scripts come from the same commit as the plan.
+                - checkout: self
+                  fetchDepth: 1
+
+                - template: templates/check-variables.yml
+                  parameters:
+                    names:
+                      - AZURE_SERVICE_CONNECTION
+                      - TFSTATE_STORAGE_ACCOUNT
+                      - TFSTATE_CONTAINER
+                      - TFSTATE_KEY
+
+                - template: templates/terraform-setup.yml
+
+                - task: AzureCLI@2
+                  displayName: terraform apply (the saved plan)
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: bash
+                    scriptLocation: scriptPath
+                    scriptPath: $(Build.SourcesDirectory)/azure-pipelines/scripts/terraform-apply.sh
+                    workingDirectory: $(Pipeline.Workspace)/tfplan/infra
+                  env:
+                    SCRIPTS_DIR: $(Build.SourcesDirectory)/azure-pipelines/scripts

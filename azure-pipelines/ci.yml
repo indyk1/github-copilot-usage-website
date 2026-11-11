@@ -1,0 +1,36 @@
+# CI: on pull requests and on pushes to main. Restore, build with warnings as errors, test, publish the results.
+# A second job checks the Terraform offline (format, validate, terraform test): no Azure access and no variables needed.
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - '*'
+
+pool:
+  vmImage: ubuntu-24.04
+
+jobs:
+  - job: BuildAndTest
+    displayName: Build and test
+    timeoutInMinutes: 20
+    steps:
+      - template: templates/build-test.yml
+
+  - job: Terraform
+    displayName: Terraform format and validate
+    timeoutInMinutes: 10
+    steps:
+      - template: templates/terraform-setup.yml
+      - bash: |
+          set -euo pipefail
+          terraform fmt -check -recursive -diff
+          terraform init -backend=false -input=false -lockfile=readonly
+          terraform validate
+          terraform test
+        displayName: fmt -check, init -backend=false, validate, test
+        workingDirectory: infra

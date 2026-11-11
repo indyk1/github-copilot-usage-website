@@ -1,0 +1,190 @@
+# Deploy: run by hand, on main. Builds, tests, publishes the web app and the Function, deploys both, then smoke-tests /healthz.
+# Authentication: the same workload-identity-federation service connection as infrastructure.yml (no secret).
+# Variables: the variable group 'copilot-usage' (docs/DEPLOY.md, step 3). The names WEBAPP_NAME and FUNCTIONAPP_NAME are
+# outputs of the infrastructure pipeline.
+
+trigger: none
+pr: none
+
+parameters:
+  - name: deployWeb
+    displayName: Deploy the web app
+    type: boolean
+    default: true
+  - name: deployFunction
+    displayName: Deploy the sync Function
+    type: boolean
+    default: true
+
+variables:
+  - group: copilot-usage
+
+pool:
+  vmImage: ubuntu-24.04
+
+stages:
+  - stage: Build
+    displayName: Build, test, publish
+    jobs:
+      - job: BuildJob
+        displayName: Build, test, publish
+        timeoutInMinutes: 30
+        steps:
+          # First of all, before minutes are spent on a build: the right branch and every variable the deployment needs.
+          - bash: |
+              if [ "$BUILD_SOURCEBRANCH" != "refs/heads/main" ]; then
+                echo "##vso[task.logissue type=error]Run this pipeline on main. It was started on $BUILD_SOURCEBRANCH."
+                exit 1
+              fi
+            displayName: Check the branch
+
+          - template: templates/check-variables.yml
+            parameters:
+              names:
+                - AZURE_SERVICE_CONNECTION
+                - TF_RESOURCE_GROUP
+                - WEBAPP_NAME
+                - FUNCTIONAPP_NAME
+
+          - template: templates/build-test.yml
+
+          # SourceRevisionId puts the commit in the version shown in the page footer and on /healthz.
+          - script: >-
+              dotnet publish src/CopilotUsage.Web --configuration Release --no-restore
+              --output "$(Build.BinariesDirectory)/web" -p:SourceRevisionId=$(Build.SourceVersion)
+            displayName: Publish the web app
+
+          - script: >-
+              dotnet publish src/CopilotUsage.SyncFunction --configuration Release --no-restore
+              --output "$(Build.BinariesDirectory)/function" -p:SourceRevisionId=$(Build.SourceVersion)
+            displayName: Publish the Function
+
+          - task: ArchiveFiles@2
+            displayName: Zip the web app
+            inputs:
+              rootFolderOrFile: $(Build.BinariesDirectory)/web
+              includeRootFolder: false
+              archiveType: zip
+              archiveFile: $(Build.ArtifactStagingDirectory)/web/web.zip
+              replaceExistingArchive: true
+
+          - task: ArchiveFiles@2
+            displayName: Zip the Function
+            inputs:
+              rootFolderOrFile: $(Build.BinariesDirectory)/function
+              includeRootFolder: false
+              archiveType: zip
+              archiveFile: $(Build.ArtifactStagingDirectory)/function/function.zip
+              replaceExistingArchive: true
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish the web package
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/web
+              artifact: web
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish the Function package
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/function
+              artifact: function
+
+  - stage: Deploy
+    displayName: Deploy and smoke test
+    dependsOn: Build
+    jobs:
+      - job: DeployJob
+        displayName: Deploy and smoke test
+        timeoutInMinutes: 45
+        steps:
+          - checkout: none
+
+          # Same names as the Build stage; checked again because a variable can be edited between the two stages.
+          - template: templates/check-variables.yml
+            parameters:
+              names:
+                - AZURE_SERVICE_CONNECTION
+                - TF_RESOURCE_GROUP
+                - WEBAPP_NAME
+                - FUNCTIONAPP_NAME
+
+          - ${{ if eq(parameters.deployWeb, true) }}:
+              - download: current
+                artifact: web
+
+          - ${{ if eq(parameters.deployFunction, true) }}:
+              - download: current
+                artifact: function
+
+          # Zip deploy with the pipeline's Entra identity (no publishing password), replacing the site content.
+          # /home/data (the SQLite file and the data-protection keys) is outside the site folder and is left alone.
+          - ${{ if eq(parameters.deployWeb, true) }}:
+              - task: AzureCLI@2
+                displayName: Deploy the web app
+                inputs:
+                  azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    set -euo pipefail
+                    az webapp deploy \
+                      --resource-group "$(TF_RESOURCE_GROUP)" \
+                      --name "$(WEBAPP_NAME)" \
+                      --src-path "$(Pipeline.Workspace)/web/web.zip" \
+                      --type zip \
+                      --clean true \
+                      --restart true
+
+          - ${{ if eq(parameters.deployFunction, true) }}:
+              - task: AzureFunctionApp@2
+                displayName: Deploy the Function (Flex Consumption)
+                inputs:
+                  azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                  appType: functionAppLinux
+                  isFlexConsumption: true
+                  appName: $(FUNCTIONAPP_NAME)
+                  package: $(Pipeline.Workspace)/function/function.zip
+
+          - ${{ if eq(parameters.deployWeb, true) }}:
+              # Smoke check. The first request may wake the app from sleep (Free plan) and run database migrations, so it retries.
+              # Sets WEB_HOST from Azure rather than from a variable, so it cannot be stale.
+              - task: AzureCLI@2
+                displayName: Find the web app's address
+                inputs:
+                  azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    set -euo pipefail
+                    host="$(az webapp show --resource-group "$(TF_RESOURCE_GROUP)" --name "$(WEBAPP_NAME)" --query defaultHostName --output tsv)"
+                    echo "Web app host: $host"
+                    echo "##vso[task.setvariable variable=WEB_HOST]$host"
+
+              - bash: |
+                  set -uo pipefail
+                  url="https://${WEB_HOST}/healthz"
+                  want="${BUILD_SOURCEVERSION:0:7}"
+                  echo "Checking $url for commit $want"
+                  for attempt in $(seq 1 30); do
+                    code="$(curl -sS -o body.json -w '%{http_code}' --max-time 60 "$url" 2>curl.err)"
+                    if [ "$code" = "200" ] && jq -e '.databaseReachable == true' body.json >/dev/null 2>&1; then
+                      cat body.json; echo
+                      if jq -e '.demo == true' body.json >/dev/null; then
+                        echo "##vso[task.logissue type=error]/healthz says demo mode is ON. Production must have Demo__Enabled=false."
+                        exit 1
+                      fi
+                      if jq -e --arg want "$want" '.version | contains($want)' body.json >/dev/null; then
+                        echo "OK: the site is up and reports commit $want."
+                        exit 0
+                      fi
+                      echo "The site answered but reports a different version; the new package may not be running yet (attempt $attempt)."
+                    else
+                      echo "Attempt $attempt: HTTP $code $(head -c 200 curl.err)"
+                    fi
+                    sleep 20
+                  done
+                  echo "##vso[task.logissue type=error]The web app did not report a healthy /healthz for commit $want within 10 minutes. Last response:"
+                  cat body.json 2>/dev/null; echo
+                  echo "Look at the log stream (docs/DEPLOY.md, step 6). Common causes: the GitHub token secret is not set in Key Vault yet, a missing app setting, or the Free plan's daily CPU quota is used up."
+                  exit 1
+                displayName: Smoke check /healthz

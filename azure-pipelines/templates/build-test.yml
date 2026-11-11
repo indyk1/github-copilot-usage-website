@@ -1,0 +1,29 @@
+# Restore, build with warnings as errors, test, publish the test results. Used by ci.yml and deploy.yml.
+steps:
+  - task: UseDotNet@2
+    displayName: Install .NET 10 SDK
+    inputs:
+      packageType: sdk
+      version: 10.0.x
+
+  - script: dotnet restore CopilotUsage.sln
+    displayName: Restore
+
+  - script: dotnet build CopilotUsage.sln --configuration Release --no-restore -warnaserror
+    displayName: Build (warnings are errors)
+
+  - script: >-
+      dotnet test CopilotUsage.sln --configuration Release --no-build
+      --logger "trx;LogFileName=test-results.trx"
+      --results-directory "$(Agent.TempDirectory)/test-results"
+    displayName: Test
+
+  - task: PublishTestResults@2
+    displayName: Publish test results
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat: VSTest
+      testResultsFiles: '**/*.trx'
+      searchFolder: $(Agent.TempDirectory)/test-results
+      testRunTitle: Copilot usage tests
+      failTaskOnFailedTests: true

@@ -1,0 +1,23 @@
+# Installs one pinned Terraform version from releases.hashicorp.com and checks its SHA-256 against HashiCorp's published list.
+# No marketplace extension is needed. Keep the version in step with required_version in infra/versions.tf.
+parameters:
+  - name: version
+    type: string
+    default: '1.17.2'
+
+steps:
+  - bash: |
+      set -euo pipefail
+      dir="${AGENT_TEMPDIRECTORY}/terraform-${TF_VERSION}"
+      mkdir -p "$dir"
+      cd "$dir"
+      zip="terraform_${TF_VERSION}_linux_amd64.zip"
+      curl -fsSLO "https://releases.hashicorp.com/terraform/${TF_VERSION}/${zip}"
+      curl -fsSLO "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_SHA256SUMS"
+      grep " ${zip}\$" "terraform_${TF_VERSION}_SHA256SUMS" | sha256sum -c -
+      unzip -q -o "$zip"
+      echo "##vso[task.prependpath]$dir"
+      "$dir/terraform" version
+    displayName: Install Terraform ${{ parameters.version }}
+    env:
+      TF_VERSION: ${{ parameters.version }}

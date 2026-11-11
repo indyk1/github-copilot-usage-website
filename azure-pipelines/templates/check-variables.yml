@@ -1,0 +1,21 @@
+# Fails at once, with a clear message, when a required pipeline variable is missing or empty.
+# Variables come from the variable group named in the pipeline file (docs/DEPLOY.md, step 3, lists them all).
+# Pipeline variables reach a script as upper-case environment variables, so the names here are upper case too.
+parameters:
+  - name: names
+    type: object
+
+steps:
+  - bash: |
+      missing=""
+      for v in ${REQUIRED}; do
+        if [ -z "${!v:-}" ]; then missing="$missing $v"; fi
+      done
+      if [ -n "$missing" ]; then
+        echo "##vso[task.logissue type=error]Missing or empty pipeline variable(s):${missing}. Add them to the Azure DevOps variable group 'copilot-usage' (Pipelines > Library). The full list is in docs/DEPLOY.md, step 3."
+        exit 1
+      fi
+      echo "All required variables are set."
+    displayName: Check required variables
+    env:
+      REQUIRED: ${{ join(' ', parameters.names) }}
