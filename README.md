@@ -74,6 +74,7 @@ read [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md) before pointing this at 
 | `AzureAd:AppIdUri` | `api://{ClientId}` | Application ID URI, accepted as audience of the sync token |
 | `AzureAd:PublicBaseUrl` | none | Pin the sign-in redirect origin (`https://dashboard.contoso.com`) instead of using the request host |
 | `AzureAd:Instance` | `https://login.microsoftonline.com/` | Login host |
+| `DataProtection:KeysPath` | `data/dataprotection-keys` (`/home/data/dataprotection-keys` in Production) | Where the data-protection keys live, so sessions survive restarts. Created at startup; the app refuses to start if it is not writable. **Sensitive**: whoever can read these files can forge a session cookie |
 | `Auth:Enabled` | `true` (`false` in Development) | Development only. In any other environment `false` stops the app from starting |
 | `ConnectionStrings:Default` | `Data Source=data/copilot-usage.db` (`/home/data/copilot-usage.db` in Production) | SQLite file; a relative path is resolved against the web project folder |
 | `Security:ContentSecurityPolicy` | built-in policy | Replace the Content-Security-Policy; empty turns it off. `{nonce}` is replaced per request |

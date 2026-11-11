@@ -100,6 +100,20 @@ carry `roles` containing `Sync.Run`, have `tid` equal to the tenant, `oid` equal
 `azp`/`appid` equal to `Sync__AllowedCallerClientId`. Anything else is a 401 (token invalid) or 403 (token valid but not allowed), with no
 explanation in the response; the reason is in the web app's log.
 
+### Data-protection keys (sessions survive restarts)
+
+The sign-in cookie and antiforgery tokens are protected with keys the app stores as files, so a restart or idle unload on the Free plan does
+not sign anyone out or break a sign-in in progress.
+
+| Key | Value |
+|---|---|
+| `DataProtection__KeysPath` | Directory for the key files. Production default `/home/data/dataprotection-keys` (next to the SQLite file, on the persistent disk). Local default `data/dataprotection-keys` under the web project, which is git-ignored |
+
+The application name is fixed (`CopilotUsageDashboard`). The directory is created at startup and the app **refuses to start** if it cannot be
+created or written. **The key files are sensitive**: they are stored unencrypted, and anyone who can read them can forge a valid session
+cookie. Restrict access to the App Service file share and Kudu/SCM site accordingly; do not copy them into backups that are widely readable.
+Backing them up is optional: if they are lost, everyone simply signs in again. If you run more than one instance they must share this directory.
+
 ## 4. Configuration: Azure Function
 
 App Settings on the Function app:

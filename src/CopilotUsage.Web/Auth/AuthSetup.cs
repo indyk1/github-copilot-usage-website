@@ -167,7 +167,7 @@ public static class AuthSetup
                     {
                         // The exception type and message name the check that failed; they go to the log only, never to the caller.
                         ctx.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("CopilotUsage.Auth")
-                            .LogWarning("Sync token rejected: {Reason}", ctx.Exception.GetType().Name);
+                            .LogWarning("Sync token rejected during validation ({Reason}); no claim of it was trusted.", ctx.Exception.GetType().Name);
                         return Task.CompletedTask;
                     },
                     OnChallenge = ctx =>
@@ -217,6 +217,9 @@ public sealed class SyncCallerHandler(IOptions<SyncOptions> sync, IOptions<Azure
 
     private string? Check(ClaimsPrincipal user)
     {
+        // The policy's handlers also run when authentication produced no user (missing token, bad signature, expired, wrong audience...).
+        // Then there is nothing to inspect: no claim may be read, and the cause was logged by the bearer scheme.
+        if (user.Identity?.IsAuthenticated != true) return "no authenticated caller: the token was missing or failed validation (see the 'Sync token rejected' line)";
         var expectedOid = sync.Value.AllowedCallerObjectId?.Trim();
         if (string.IsNullOrEmpty(expectedOid)) return "no allowed caller is configured";
 

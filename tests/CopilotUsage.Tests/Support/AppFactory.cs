@@ -40,6 +40,7 @@ public sealed class AppFactory : WebApplicationFactory<Program>
         {
             ["Demo:Enabled"] = "true",
             ["ConnectionStrings:Default"] = $"Data Source={Path.Combine(_dir, "t.db")}",
+            ["DataProtection:KeysPath"] = Path.Combine(_dir, "keys"),
             ["AzureAd:TenantId"] = TestIds.Tenant,
             ["AzureAd:ClientId"] = TestIds.ClientId,
             ["Sync:AllowedCallerObjectId"] = TestIds.FunctionOid,

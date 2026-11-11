@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using CopilotUsage.Core;
 using CopilotUsage.Data;
 using CopilotUsage.Data.Entities;
@@ -24,6 +25,18 @@ if (configErrors.Count > 0)
     foreach (var e in configErrors) Console.Error.WriteLine("  - " + e);
     return 1;
 }
+
+// Sign-in cookies and antiforgery tokens are protected with keys that must outlive the process: the Free plan unloads the app when idle.
+var keysPath = ResolveKeysPath(builder);
+try { VerifyWritableDirectory(keysPath); }
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"Refusing to start: the data-protection keys directory '{keysPath}' (DataProtection:KeysPath) cannot be created or written: {ex.Message}");
+    return 1;
+}
+builder.Services.AddDataProtection()
+    .SetApplicationName("CopilotUsageDashboard")
+    .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
 
 builder.Services.Configure<GitHubOptions>(builder.Configuration.GetSection(GitHubOptions.SectionName));
 builder.Services.Configure<CopilotOptions>(builder.Configuration.GetSection(CopilotOptions.SectionName));
@@ -157,6 +170,20 @@ app.MapRazorComponents<App>()
 
 await app.RunAsync();
 return 0;
+
+static string ResolveKeysPath(WebApplicationBuilder b)
+{
+    var configured = b.Configuration["DataProtection:KeysPath"];
+    return Path.GetFullPath(string.IsNullOrWhiteSpace(configured) ? "data/dataprotection-keys" : configured.Trim(), b.Environment.ContentRootPath);
+}
+
+static void VerifyWritableDirectory(string dir)
+{
+    Directory.CreateDirectory(dir);
+    var probe = Path.Combine(dir, ".write-test-" + Guid.NewGuid().ToString("N"));
+    File.WriteAllText(probe, "ok");
+    File.Delete(probe);
+}
 
 // Relative SQLite paths are resolved against the content root (not the shell's cwd); the folder is created if missing.
 static string ResolveConnectionString(WebApplicationBuilder b)
