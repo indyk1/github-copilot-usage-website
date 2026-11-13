@@ -1,7 +1,8 @@
 # Copilot Usage Dashboard
 
-A .NET 10 Blazor dashboard showing how a GitHub organization consumes its monthly Copilot AI-credit allowance
-(Copilot Business: 1,900 credits per seat, pooled across the org, 1 credit = $0.01, reset 00:00 UTC on the 1st).
+A .NET 10 Blazor dashboard showing how a GitHub **enterprise** (when the enterprise holds the Copilot billing) or a self-billed **organization**
+consumes its monthly Copilot AI-credit allowance (Copilot Business: 1,900 credits per seat, pooled across the billing entity, 1 credit = $0.01,
+reset 00:00 UTC on the 1st). Set `GitHub:Enterprise` for enterprise scope, `GitHub:Org` for organization scope (see Configuration).
 See [PLAN.md](PLAN.md) for the full spec. A sync, started by an Azure Function on a timer, copies GitHub data into SQLite; pages read only from SQLite.
 
 **Status: shippable, not yet deployed.** The application (calculations, GitHub client, database, sync, demo data, the "glass and aurora" theme,
@@ -60,15 +61,18 @@ light, two inactive), six models, and activity by feature, IDE, client and langu
 ## Run it against GitHub
 
 ```bash
-export GitHub__Org=your-org
+export GitHub__Enterprise=your-enterprise   # enterprise scope: the enterprise holds the Copilot billing
+# export GitHub__Org=your-org               # organization scope instead, for a self-billed organization
 export GitHub__Token=...      # never commit this
 export Demo__Enabled=false
 dotnet run --project src/CopilotUsage.Web
 ```
 
 Or use `dotnet user-secrets` for the token. The app refuses to start, with a message naming the missing key, if demo mode
-is off and `GitHub:Org` or `GitHub:Token` is missing. The GitHub endpoints and field names are **unverified assumptions**:
-read [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md) before pointing this at a real organization.
+is off and neither `GitHub:Enterprise` nor `GitHub:Org`, or `GitHub:Token`, is set. The GitHub endpoints and field names are **unverified assumptions**
+(in enterprise scope only the seats endpoint is documented): read [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md) before pointing this at real data, and run
+`scripts/check-github-token.sh` first ([docs/DEPLOY.md](docs/DEPLOY.md), section 1.1). A 403 "Resource not accessible by personal access token" from the
+organization endpoints usually means the organization is billed through an enterprise: set `GitHub:Enterprise`.
 
 ## Configuration
 
@@ -76,7 +80,8 @@ read [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md) before pointing this at 
 |---|---|---|
 | `Demo:Enabled` | `false` (`true` in Development) | Skip GitHub, seed demo data. Refused (startup and Refresh) if the database holds data from a real sync; see below |
 | `Demo:Scenario` | `normal` | Demo dataset: `normal` (about half the pool), `over` (pool exhausted with overage), `empty` (seats, no usage yet) |
-| `GitHub:Org` | none | Organization login (required unless demo) |
+| `GitHub:Enterprise` | none | Enterprise slug. Switches the app to **enterprise scope**: every call uses the enterprise endpoints and the pool is all enterprise seats x credits per seat, counting each user once. Needs a classic token from an enterprise owner. Required unless demo, or `GitHub:Org` is set |
+| `GitHub:Org` | none | Organization login (organization scope, for a self-billed organization). **If `GitHub:Enterprise` is also set the enterprise wins and the organization is ignored**, with one log line at startup. Required unless demo, or `GitHub:Enterprise` is set |
 | `GitHub:Token` | none | Access token, configuration only (required unless demo) |
 | `GitHub:BaseUrl` | `https://api.github.com/` | API base URL |
 | `GitHub:ApiVersion` | `2026-03-10` | Sent as `X-GitHub-Api-Version` |
@@ -97,7 +102,7 @@ read [docs/API-ASSUMPTIONS.md](docs/API-ASSUMPTIONS.md) before pointing this at 
 | `ConnectionStrings:Default` | `Data Source=data/copilot-usage.db` (`/home/data/copilot-usage.db` in Production) | SQLite file; a relative path is resolved against the web project folder |
 | `Security:ContentSecurityPolicy` | built-in policy | Replace the Content-Security-Policy; empty turns it off. `{nonce}` is replaced per request |
 
-Environment variables use `__` as the separator (`GitHub__Org`). `appsettings.Production.json` (committed, no secrets) sets the
+Environment variables use `__` as the separator (`GitHub__Enterprise`, `GitHub__Org`). `appsettings.Production.json` (committed, no secrets) sets the
 App Service database path, demo off and quieter log levels (HttpClient at Warning). The token is only ever read from
 configuration and the app refuses to start with an unresolved `@Microsoft.KeyVault(...)` text in its place.
 

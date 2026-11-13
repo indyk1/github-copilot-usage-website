@@ -1,15 +1,15 @@
 # Copilot Usage Dashboard — Build Plan
 
-A .NET dashboard that shows how one GitHub organization is consuming its monthly
-Copilot allowance, who is consuming it, and what each person is doing with it.
+A .NET dashboard that shows how one GitHub billing entity (an enterprise, or a self-billed organization)
+is consuming its monthly Copilot allowance, who is consuming it, and what each person is doing with it.
 
 ## 1. Decisions
 
 | Topic | Decision |
 |---|---|
-| Account | Single GitHub organization |
+| Account | One GitHub billing entity: an **enterprise** (`GitHub:Enterprise`, when the enterprise holds the Copilot billing) or a single self-billed **organization** (`GitHub:Org`). The enterprise wins if both are set. See the addendum at the end of section 3 |
 | Plan | Copilot Business |
-| Limit model | Org pool, plus a notional per-user "fair share" |
+| Limit model | Pool of the billing entity (enterprise-wide or organization-wide), plus a notional per-user "fair share" |
 | Stack | Blazor Web App (.NET 10, Interactive Server) |
 | Data | Sync into SQLite (EF Core), triggered by `POST /api/sync` |
 | Scheduler | An Azure Function (Flex Consumption, timer, every 4 hours) calls the sync endpoint with its managed identity. No in-app timer in production: the Free plan sleeps the web app when idle |
@@ -28,7 +28,7 @@ This changes what "limit" and "remaining" mean, so it drives the whole design.
 - Since 1 June 2026 Copilot bills in **AI credits**, not premium requests.
   1 credit = $0.01. Cost depends on the model and the tokens consumed.
 - Copilot Business includes **1,900 credits per seat per month**.
-- Credits are **pooled across the organization**. 20 seats = one shared pool of
+- Credits are **pooled across the billing entity**: the organization when it is billed by itself, the whole enterprise when the enterprise holds the billing. 20 seats = one shared pool of
   38,000 credits. GitHub has no per-person allowance.
 - The pool resets at 00:00 UTC on the 1st of each month. Unused credits do not roll over.
 - Inline code completions and next edit suggestions are unlimited and cost no credits.
@@ -123,6 +123,20 @@ come from search summaries of the docs and need a first-day check:
 5. How GitHub sizes the pool when seats are added or removed mid-month.
 6. Whether the seats response still includes `last_activity_editor`.
 
+### 3.6 Enterprise scope (addendum)
+
+The first real call showed that the organization belongs to a GitHub Enterprise account and the **enterprise holds the Copilot billing**, so the
+organization-level billing call is refused (403). With `GitHub:Enterprise` set the app uses the enterprise endpoints for every call and the pool is
+all enterprise seats x credits per seat, each user counted once:
+
+- `GET /enterprises/{enterprise}/copilot/billing/seats` (documented); there is no known enterprise seat-summary endpoint, so the summary is derived from the seats.
+- `GET /enterprises/{enterprise}/settings/billing/ai_credit/usage` and `GET /enterprises/{enterprise}/copilot/metrics/reports/users-28-day/latest`
+  (guesses that mirror the organization paths and the documented enterprise `premium_request/usage`).
+- A classic token from an enterprise owner (scopes unverified: `manage_billing:copilot`, `read:enterprise`).
+
+Details, what is documented and what is a guess, and how each summary field is handled: docs/API-ASSUMPTIONS.md, "Enterprise scope". Verify with
+`scripts/check-github-token.sh` before the first deployment (docs/DEPLOY.md, section 1.1). Organization scope (self-billed organizations) is unchanged.
+
 ## 4. Pages
 
 ### 4.1 Home `/`
@@ -178,7 +192,7 @@ CopilotUsage.sln
   `UserMetricBreakdown` (day, user, dimension, key, counts), `SyncRun`.
 - **UI** — Blazor Interactive Server, so the GitHub token stays on the server.
   Charts with Blazor-ApexCharts. Pages read only from SQLite, never from GitHub.
-- **Config** — `GitHub:Org`, `GitHub:Token`, `Copilot:CreditsPerSeat` (1900),
+- **Config** — `GitHub:Enterprise` or `GitHub:Org` (one is required; the enterprise wins), `GitHub:Token`, `Copilot:CreditsPerSeat` (1900),
   `Sync:IntervalHours`, `AzureAd:*`, `Sync:AllowedCallerObjectId` (see docs/AUTH.md).
 - **Azure Function** — `src/CopilotUsage.SyncFunction`: a timer that gets a token from its managed identity and calls the sync endpoint. It holds no secret
   and never touches the database or GitHub.
@@ -225,7 +239,7 @@ Details, cost and the order of operations are in docs/DEPLOY.md; the Entra contr
 
 ## 9. Needed from the organization
 
-- An org owner token for the sync job (type confirmed in the spike).
+- A token for the sync job (type confirmed by `scripts/check-github-token.sh`): an enterprise owner's classic token in enterprise scope, an org owner's token in organization scope.
 - "Copilot usage metrics" policy enabled for the organization.
 - An Entra IT admin: the app registration (docs/AUTH.md), the `Sync.Run` role assignment and, optionally, the Conditional Access policy.
 - An Azure subscription, an Azure DevOps organization and a place for the Terraform state (docs/DEPLOY.md, steps 2 and 3).

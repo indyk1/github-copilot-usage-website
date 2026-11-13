@@ -25,6 +25,8 @@ up as **zeros and empty lists, not as an error**, so after the first real sync c
 parse failure that surfaces is a body that is not a JSON object at all (for example an HTML error page), reported as a
 `GitHubApiException`.
 
+> Sections 1 to 4 describe **organization scope**. Enterprise scope is described in the last section, "Enterprise scope".
+
 ## Common to all calls
 
 | Assumption | Detail |
@@ -93,3 +95,91 @@ The code only sends a bearer token; it does not care what type it is. Assumed re
 - `ai_credits_used` is stored per user per day as an analysis signal. It is **never added to** the billed figures (PLAN.md 3.4).
 - The sync only reads the latest 28-day report; days older than that are never back-filled.
 - Lines without `user_login` or a parseable `day`, and lines that are not JSON, are skipped and counted (logged as a warning).
+
+---
+
+# Enterprise scope
+
+Added after the first real call showed that the owner's organization belongs to a GitHub Enterprise account and **the enterprise, not the
+organization, holds the Copilot billing**: the organization-level billing call was refused with 403 "Resource not accessible by personal
+access token". There is still **no GitHub access from the build environment**: nothing below was run. What was checked is a web search of
+GitHub's public documentation (docs.github.com itself is not reachable from here), so "documented" means "a search result said so", not "tested".
+Run `scripts/check-github-token.sh --enterprise <slug>` (docs/DEPLOY.md, section 1.1) to turn the guesses into facts.
+
+## Selection
+
+`GitHub:Enterprise` set means enterprise scope: every call uses the enterprise endpoint. Only `GitHub:Org` set means organization scope, exactly as
+described above. **Both set: the enterprise wins and the organization is ignored**, with one information line in the log at startup (least surprising
+when a deployment keeps its old `GitHub__Org` and adds `GitHub__Enterprise`; failing to start would turn a harmless leftover into an outage). Startup
+validation requires one of the two outside demo mode. Demo mode always behaves as an organization.
+
+## Endpoints (all in `GitHubEndpoints.cs`)
+
+| Call | Enterprise path | Status |
+|---|---|---|
+| Seats | `GET /enterprises/{enterprise}/copilot/billing/seats?per_page=&page=` | **Documented** (Copilot user management, public beta). Paginated; `total_seats` and `seats`; enterprise owners and billing managers only; classic token with `manage_billing:copilot` or `read:enterprise` per the English documentation as found (a translated page named `admin:enterprise`; **unverified**). A user reachable through several organizations is counted once in `total_seats`. |
+| Seat summary | none | **Believed not to exist.** Not called. See the table below. |
+| AI-credit usage | `GET /enterprises/{enterprise}/settings/billing/ai_credit/usage?year=&month=&day=&user=&model=` | **Guess.** Mirrors the **documented** enterprise `GET /enterprises/{enterprise}/settings/billing/premium_request/usage` (administrators and billing managers only; documented as not working with fine-grained tokens, GitHub App tokens; data for the past 24 months). That endpoint also accepts `organization` and `cost_center_id` filters; the app uses neither. The response is assumed to have the same shape as the organization one (section 3). |
+| Usage metrics, 28-day | `GET /enterprises/{enterprise}/copilot/metrics/reports/users-28-day/latest` | **Guess.** Mirrors the organization path, which is itself unverified (section 4). |
+| Usage metrics, one day | `GET /enterprises/{enterprise}/copilot/metrics/reports/users-1-day?day=YYYY-MM-DD` | **Guess**, and not used by the sync. |
+
+Everything else (headers, retries, signed report downloads without the token, tolerant parsing) is as in "Common to all calls". The sync steps keep
+their names (`Seats`, `OrgCreditsByDay`, ...); in enterprise scope "org" in those names means the whole enterprise.
+
+## Seat rows
+
+`seats[].organization.login` (the organization that assigned the seat) is read **if present** (**guess**: the organization seat object has an
+`organization` field; whether the enterprise list carries it is unknown). `assigning_team` may be an organization team or an enterprise team; the
+same `name`/`slug` fields are read. If one login comes back in several rows (one per organization) the rows are merged: organizations are joined
+(`org-a, org-b`), the first non-empty value of the other fields is kept, the latest `last_activity_at` wins. If the number of distinct logins differs
+from GitHub's `total_seats` a warning is logged and the list is used. An **empty list while `total_seats` is above zero is treated as a failed step**
+(the old seats are kept), the same guard as the organization scope has against a renamed field.
+
+The organization is stored on the seat (migration `EnterpriseScope`) and shown on the users table and the user page **only when more than one
+distinct organization is present** across the seats.
+
+## Seat summary fields in enterprise scope
+
+The organization summary (`/orgs/{org}/copilot/billing`) supplies `plan_type` and `seat_breakdown`. In enterprise scope nothing is invented:
+
+| Field | Organization scope | Enterprise scope |
+|---|---|---|
+| `TotalSeats` (the pool size) | `seat_breakdown.total` | **Derived**: the number of distinct logins in the seat list (deduplicated across organizations) |
+| `ActiveThisCycle` | `seat_breakdown.active_this_cycle` | **Derived**: seats whose `last_activity_at` falls in the current UTC calendar month (the billing cycle) |
+| `InactiveThisCycle` | `seat_breakdown.inactive_this_cycle` | **Derived**: total minus active |
+| `AddedThisCycle` | `seat_breakdown.added_this_cycle` | **Derived**: seats whose `created_at` falls in the current UTC month |
+| `PlanType` | `plan_type` | **Derived**: the distinct seat `plan_type` values, joined with `+` (for example `business`, or `business+enterprise`); null if none is given |
+| `PendingInvitation` | `seat_breakdown.pending_invitation` | **Unavailable** (null, stored as NULL). Invitations are not seats. |
+| `PendingCancellation` | `seat_breakdown.pending_cancellation` | **Unavailable** (null). The seat objects may carry `pending_cancellation_date` but that is not relied on. |
+
+Only `TotalSeats` and `ActiveThisCycle` are shown anywhere in the UI; the rest is stored. The derived "active" figure is **not** GitHub's own
+`active_this_cycle` and can differ from it (it depends on how GitHub counts activity).
+
+## Pool
+
+In enterprise scope the pool is **all enterprise seats x credits per seat**, deduplicated by user (`TotalSeats` above), exactly like the organization
+pool but over the enterprise. `Copilot:CreditsPerSeat` is one number for everyone: if the enterprise mixes plans with different included credits
+(`PlanType` shows `business+enterprise`) the pool is wrong by the difference, and the number must be set by hand to a blended value or accepted.
+GitHub also lets an enterprise assign cost centers and budgets; those are not modelled.
+
+## Token (enterprise scope)
+
+Classic personal access token created by an enterprise owner (or billing manager where sufficient). Scopes **unverified**: `manage_billing:copilot`
+and `read:enterprise`; `manage_billing:enterprise` is the next candidate if the usage line answers 403. Fine-grained tokens are understood not to be
+accepted by the enterprise billing endpoints (documented for `premium_request/usage`). If the enterprise or organization enforces SAML SSO the token
+must be authorised for it. Failure messages: a 403 in enterprise scope logs a hint at token type and scopes; a 403 or 404 in organization scope on
+the seat or billing calls logs a hint that the organization may be billed through an enterprise and `GitHub:Enterprise` should be set.
+
+## What the failure messages contain
+
+- **Application log** (`GitHubClient`, once per failed call after retries): the call kind, the request path **without the query string** (the query
+  can hold a user login), the HTTP status, the scope, GitHub's own `message` (one line, truncated to 300 characters, the token value replaced if it
+  were echoed) and the hint. Never the token or the Authorization header. A failed signed-report download logs only the status (the URL carries a signature).
+- **Sync log and the "Sync failed" banner** (stored in the database, shown to every signed-in user): the step, the call in the step, the HTTP status and the
+  hint, for example `Seats step (seat summary) failed: GitHub answered HTTP 403 Forbidden. ...`. No path, no GitHub message text, no organization or
+  enterprise name. Failures that are not GitHub responses (network down, timeout) keep their exception message, as before.
+- `POST /api/sync` still returns no error text at all.
+
+## Fixtures
+
+New fixtures (`enterprise_seats_page1.json`, `enterprise_seats_page2.json`) are **synthetic**, written by hand to the shapes above; they were not recorded from GitHub.

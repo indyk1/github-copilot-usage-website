@@ -58,13 +58,40 @@ Total expectation: **0 to well under 1 USD a month**.
 2. **An Azure DevOps organization** and project (step 3), and rights to create pipelines and service connections in it.
 3. **An Entra IT admin** (step 4, step 5.6 and step 7). Creating app registrations and assigning an app role needs directory roles that most people do not have.
 4. **The Azure CLI** (`az`) on your computer, version 2.60 or newer *(approximate)*: <https://learn.microsoft.com/cli/azure/install-azure-cli>. Sign in with `az login`.
-5. **GitHub**: you must be an owner of the GitHub organization whose Copilot usage you want to show, and an admin of this repository (to let Azure Pipelines read it).
-6. **A GitHub token** the app uses to read Copilot data:
-   - Create it as an **organization owner** (or billing manager) under GitHub > Settings > Developer settings > Personal access tokens. Either a classic token with `manage_billing:copilot` and `read:org`, or a fine-grained token on the organization with Copilot Business (read) and Administration (read).
-   - The organization's **"Copilot usage metrics" policy must be enabled**.
-   - **These scopes are assumptions, not verified.** See "Token and scopes" in [API-ASSUMPTIONS.md](API-ASSUMPTIONS.md). If the first sync fails with 401, 403 or 404, the token type and scopes are the first suspect.
-   - Keep it out of files, chat, pipeline variables and the repository. You will paste it **once**, into a terminal prompt or the Key Vault page, in step 5.4.
-   - A classic token can be given an expiry. Put the expiry date in your calendar: section 8 explains rotation.
+5. **GitHub**: you must be an owner of the GitHub **enterprise** (when the organization belongs to a GitHub Enterprise account that holds the Copilot billing) or of the **organization** (when it is billed by itself), and an admin of this repository (to let Azure Pipelines read it).
+6. **Which scope: enterprise or organization?** Look at who is billed. If the organization belongs to a GitHub Enterprise account, **the enterprise holds the Copilot billing** and the included credits (1,900 per Copilot Business seat) are pooled across the whole enterprise. Then use **enterprise scope**: set `TF_GITHUB_ENTERPRISE` (the enterprise slug, the last part of `github.com/enterprises/<slug>`). The dashboard then shows every Copilot seat in the enterprise, counting a user once even if several organizations assign them a seat. An organization-level call for such an organization is refused with 403 "Resource not accessible by personal access token". Use **organization scope** (`TF_GITHUB_ORG`, the organization login) only for a self-billed organization. If both are set the enterprise is used and the organization is ignored (the app logs one line at startup saying so); give only the one you mean.
+7. **A GitHub token** the app uses to read Copilot data. Its type depends on the scope:
+   - **Enterprise scope: a classic personal access token** created by an **enterprise owner** (or, where sufficient, a billing manager) under GitHub > Settings > Developer settings > Personal access tokens (classic). The enterprise billing endpoints are understood **not** to accept fine-grained tokens. Scopes, **unverified**: `manage_billing:copilot` and `read:enterprise` (GitHub's documentation for the enterprise seats endpoint names either of the two; the enterprise billing and usage-metrics endpoints may need more, and `manage_billing:enterprise` is the next one to try if the checker below answers 403 on the usage line).
+   - **If the enterprise or the organization enforces SAML single sign-on, authorise the token for it** (the token's "Configure SSO" button). A token that is not authorised is refused with 403, and the response then carries an `X-GitHub-SSO` header (the checker reports it).
+   - **A classic token is broader than a fine-grained one** (it carries the scope for everything that scope covers, not one organization's Copilot data). Treat it accordingly: store it **only in Key Vault** (step 5.4), give it an expiry, create it from an account that only needs this role, and never put it in a file, chat, pipeline variable or the repository.
+   - **Organization scope (self-billed organization):** create it as an **organization owner** (or billing manager). Either a classic token with `manage_billing:copilot` and `read:org`, or a fine-grained token on the organization with Copilot Business (read) and Administration (read). The fine-grained route is the narrower one and is preferred here.
+   - The **"Copilot usage metrics" policy must be enabled** (for the organization, or for the enterprise in enterprise scope).
+   - **These scopes are assumptions, not verified.** See "Token and scopes" and "Enterprise scope" in [API-ASSUMPTIONS.md](API-ASSUMPTIONS.md). If the first sync fails with 401, 403 or 404, the token type and scopes are the first suspect; the next subsection tells you how to find out before deploying.
+   - You will paste the token **once**, into a terminal prompt or the Key Vault page, in step 5.4. A classic token can be given an expiry. Put the expiry date in your calendar: section 8 explains rotation.
+
+### 1.1 Check the token before you deploy anything  *(manual, do this first)*
+
+`scripts/check-github-token.sh` calls every GitHub endpoint the app will use, for your scope, and prints one line per endpoint. It needs only `bash` and `curl`, takes the token from the environment variable `GITHUB_TOKEN` (never from an argument, never printed), and never prints response values: for a 200 it prints only the **field names** of the answer so you can compare them with the assumptions.
+
+```bash
+read -rs GITHUB_TOKEN && export GITHUB_TOKEN     # paste the token, press Enter; nothing is shown
+scripts/check-github-token.sh --enterprise <enterprise-slug>      # enterprise scope
+scripts/check-github-token.sh --org <organization-login>          # organization scope
+unset GITHUB_TOKEN
+```
+
+Each line looks like `403  GET /enterprises/<slug>/copilot/billing/seats  [seats]  FIX THE TOKEN: ...`. It also prints the scopes GitHub reports for the token, and for a non-200 answer GitHub's short error text (an error message, not data). What the results mean:
+
+| Result | Meaning | What to do |
+|---|---|---|
+| **200** on every line | The token and the endpoints work | Compare the listed field names with [API-ASSUMPTIONS.md](API-ASSUMPTIONS.md); a renamed field would show in the app as zeros |
+| **401** | GitHub rejected the token | **Fix the token**: wrong, expired or revoked |
+| **403** on every line | The token is valid but not allowed | **Fix the token**: not a classic token (enterprise), missing scope, you are not an enterprise owner or billing manager, or SAML SSO is not authorised (the line says so when GitHub sent the SSO header). With `--org` a 403 on the seat and usage lines usually means the organization is billed through an enterprise: run with `--enterprise` |
+| **404** on every line | Wrong slug, or the token cannot see it | Check the slug and the token owner's role. With `--org`, also try `--enterprise` |
+| **200** on seats but **404** on the usage or metrics line | **An endpoint assumption is wrong**, not the token | See [API-ASSUMPTIONS.md](API-ASSUMPTIONS.md) (the enterprise usage and metrics paths are guesses) and `GitHubEndpoints.cs`; tell the developer the line you got |
+| **403** on only the metrics line | The usage-metrics policy is off, or the token lacks access to metrics | Enable the policy; check the scope |
+
+Exit code 0 means every endpoint answered 200. `--deep` also lists nested field names (names only; use it on a screen nobody else sees). Do not continue to step 5.4 until the seats and usage lines are 200.
 
 ## 2. Terraform state storage and the resource group  *(manual)*
 
@@ -180,7 +207,8 @@ Pipelines > **Library** > **+ Variable group**, name it exactly **`copilot-usage
 | `TFSTATE_KEY` | yes | infrastructure | State file name, `copilot-usage.tfstate` |
 | `TF_RESOURCE_GROUP` | yes | infrastructure, deploy | Application resource group, `rg-copilot-usage` |
 | `TF_NAME_PREFIX` | yes | infrastructure | 3 to 12 lowercase letters or digits, e.g. `copilotusage` |
-| `TF_GITHUB_ORG` | yes | infrastructure | Your GitHub organization's login |
+| `TF_GITHUB_ENTERPRISE` | one of these two | infrastructure | The GitHub enterprise slug, when the enterprise holds the Copilot billing (enterprise scope, section 1) |
+| `TF_GITHUB_ORG` | one of these two | infrastructure | The GitHub organization login, for a self-billed organization. If both are set the enterprise is used and the organization is ignored |
 | `TF_ENTRA_TENANT_ID` | yes | infrastructure | Directory (tenant) ID from the app registration (step 4) |
 | `TF_ENTRA_CLIENT_ID` | yes | infrastructure | Application (client) ID of the web app registration (step 4) |
 | `WEBAPP_NAME` | for deploy | deploy | Web app name: an output of the infrastructure run (step 5.2) |
@@ -195,7 +223,7 @@ Pipelines > **Library** > **+ Variable group**, name it exactly **`copilot-usage
 | `TF_DISABLE_BASIC_AUTH_PUBLISHING` | no | infrastructure | Default `true` (no publishing passwords). Set `false` only if a deployment is refused by the SCM site (section 9, risk 5) |
 | `TF_KEY_VAULT_SECRETS_OFFICER_OBJECT_IDS` | no | infrastructure | Comma-separated object ids of the people or groups who may set the GitHub token secret in Key Vault (step 5.4). Find yours with `az ad signed-in-user show --query id -o tsv` |
 
-A pipeline that finds a required variable missing stops in its first step and names it.
+A pipeline that finds a required variable missing stops in its first step and names it. Neither of the two GitHub variables is required on its own: Terraform refuses the plan unless at least one is given.
 
 ### 3.6 The environment with an approval
 
@@ -335,8 +363,8 @@ now, takes a minute or more), then check every item. If you cannot see the site,
 
 **Real GitHub numbers**
 
-1. **Home page says "Data as of" with a recent time**, and no red "Sync failed" or amber "Partly updated" banner. If there is one, read the message under it and the logs.
-2. **Seat count** on the home page ("N seats x 1,900 credits") equals the number of Copilot seats in the GitHub organization settings (Settings > Copilot > Access). If it is 0 or off: `GitHubMappings.cs` (seat summary mapping) and `Dtos/Dtos.cs` (`SeatBillingDto`).
+1. **Home page says "Data as of" with a recent time**, and no red "Sync failed" or amber "Partly updated" banner. If there is one, read the message under it and the logs. The banner and the stored sync log name the failed step and the HTTP status and carry a hint (for example: *Seats step (seat summary) failed: GitHub answered HTTP 403 Forbidden. This organization may be billed through a GitHub Enterprise account ... set GitHub:Enterprise*). The **application log** has more: the request path (without query string or token), GitHub's own error text (truncated) and the same hint. A 403 or 404 on the seat or billing calls in organization scope means the organization is probably billed through an enterprise: set `TF_GITHUB_ENTERPRISE`. A 403 in enterprise scope points at the token type, scopes, role or SAML authorisation (section 1).
+2. **Seat count** on the home page ("N seats x 1,900 credits") equals the number of Copilot seats in the GitHub organization settings (Settings > Copilot > Access), or, in enterprise scope, the number of distinct users with a seat across the enterprise (a user with seats through two organizations counts once). If it is 0 or off: `GitHubMappings.cs` (seat summary mapping) and `Dtos/Dtos.cs` (`SeatBillingDto`).
 3. **Pool limit** equals seats x credits per seat (1,900 for Copilot Business). If your plan differs, set `TF_CREDITS_PER_SEAT` and run the infrastructure pipeline.
 4. **Credits are non-zero** once people have used Copilot this month, and the total roughly matches GitHub's billing page (Billing > Usage). All zeros while GitHub shows usage means the credit response fields do not match: `GitHubEndpoints.cs` (the `ai_credit/usage` path), `Dtos/Dtos.cs` (`CreditUsageResponseDto`), `GitHubMappings.cs` (`ToCreditRecords`).
 5. **Per-user figures**: the leaderboard and `/users` show credits per person, and one user page matches what GitHub shows for that person. Zeros here with a non-zero pool point at the per-user call (same three files).
@@ -426,7 +454,7 @@ These are from the author's understanding of the Free plan; anything marked *unv
 
 ### Logs
 
-- **Web app**: portal > the web app > Monitoring > **Log stream**, or `az webapp log tail -g "$APP_RG" -n <web_app_name>`. Logs never contain the token or Authorization headers. Look for `CopilotUsage.Web.Sync.SyncService` lines and `Sync call refused` / `Sign-in refused` lines.
+- **Web app**: portal > the web app > Monitoring > **Log stream**, or `az webapp log tail -g "$APP_RG" -n <web_app_name>`. Logs never contain the token or Authorization headers. Look for `CopilotUsage.Web.Sync.SyncService` lines and `Sync call refused` / `Sign-in refused` lines. A failed GitHub call logs one `GitHub call ... failed: GET <path> returned HTTP <status> ...` line from `CopilotUsage.GitHub.GitHubClient` with the path, GitHub's own message (truncated, token removed) and a hint.
 - **Function**: Application Insights > **Logs** (queries in 6.2, item 14). Without monitoring: the Function app > Monitor in the portal shows only recent invocations *(unverified for Flex)*.
 
 ### When the dashboard looks stale
@@ -481,7 +509,7 @@ To look at demo data on the production web app, use a separate file and expect T
 az webapp config appsettings set -g "$APP_RG" -n <web_app_name> --settings Demo__Enabled=true "ConnectionStrings__Default=Data Source=/home/data/demo.db"
 ```
 
-(`Demo__Scenario` can be `normal`, `over` or `empty`.) A "Demo data" badge appears. To go back, run the infrastructure pipeline (it detects the drift and shows it in the plan; approve it), or set `Demo__Enabled=false` and `ConnectionStrings__Default=Data Source=/home/data/copilot-usage.db` by hand.
+Demo data is always worded as an organization, even if `GitHub__Enterprise` is set. (`Demo__Scenario` can be `normal`, `over` or `empty`.) A "Demo data" badge appears. To go back, run the infrastructure pipeline (it detects the drift and shows it in the plan; approve it), or set `Demo__Enabled=false` and `ConnectionStrings__Default=Data Source=/home/data/copilot-usage.db` by hand.
 
 ### Changing settings
 
@@ -504,5 +532,5 @@ With a custom domain also set `TF_WEB_PUBLIC_BASE_URL` and register that domain'
 6. **The web app does not start** (smoke check fails): almost always the GitHub token secret not set yet or the Key Vault reference unresolved (step 5.4), or `AzureAd__*` / `Sync__AllowedCallerObjectId` missing (the app names each missing key in its log).
 7. **Sign-in error AADSTS50011 (redirect URI mismatch)**: step 5.3 not done, or the URIs differ from the outputs (including the exact host name).
 8. **Function gets 403** after step 5.6 was done late (cached token), or the Free-plan CPU quota (section 8).
-9. **The GitHub endpoints and field names** are unverified assumptions (checklist items 2 to 9): zeros, not errors.
+9. **The GitHub endpoints and field names** are unverified assumptions (checklist items 2 to 9): zeros, not errors. In enterprise scope only the seats endpoint is documented; the usage and metrics paths are guesses (run `scripts/check-github-token.sh`, section 1.1, before deploying).
 10. **Soft-deleted Key Vault.** If you ever destroy and re-create the infrastructure, the vault name is held for the soft-delete period (7 days): purge it with `az keyvault purge --name <name>` or use a different `TF_NAME_PREFIX`.
