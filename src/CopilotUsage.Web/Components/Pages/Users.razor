@@ -1,10 +1,12 @@
 @page "/users"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using CopilotUsage.Core
+@using CopilotUsage.GitHub
 @using CopilotUsage.Data.Queries
 @inject IServiceScopeFactory Scopes
 @inject TimeProvider Time
 @inject IOptions<CopilotOptions> Copilot
+@inject GitHubScope Scope
 @inject ILogger<Users> Logger
 
 <PageTitle>Users · Copilot Usage</PageTitle>
@@ -61,7 +63,7 @@
                 <div class="sortbar">
                     <label for="user-sort">Sort by</label>
                     <select id="user-sort" @onchange="OnSortSelected">
-                        @foreach (var c in Columns)
+                        @foreach (var c in ShownColumns)
                         {
                             <option value="@UsersTable.Key(c.Sort)" selected="@(c.Sort == _sort)">@c.Title</option>
                         }
@@ -88,7 +90,7 @@
                 <table class="grid" role="table" aria-label="Copilot seats, sorted by @SortDescription">
                     <thead role="rowgroup">
                         <tr role="row">
-                            @foreach (var c in Columns)
+                            @foreach (var c in ShownColumns)
                             {
                                 <th scope="col" role="columnheader" class="c-@UsersTable.Key(c.Sort) @(c.Numeric ? "numeric" : null)"
                                     aria-sort="@UsersTable.AriaSort(c.Sort, _sort, _desc)">
@@ -121,6 +123,13 @@
                                         </span>
                                     </a>
                                 </th>
+                                @if (_showOrg)
+                                {
+                                    <td role="cell" class="c-org" data-label="Organization">
+                                        @if (!string.IsNullOrWhiteSpace(r.Organization)) { <span>@r.Organization</span> }
+                                        else { <span aria-hidden="true">–</span><span class="visually-hidden">None</span> }
+                                    </td>
+                                }
                                 <td role="cell" class="numeric c-credits" data-label="Credits"><strong>@Fmt.Credits(r.Credits)</strong><span class="unit"> credits</span></td>
                                 <td role="cell" class="c-fair" data-label="Fair share">
                                     <FairShareMeter Credits="@r.Credits" FairShare="@Copilot.Value.CreditsPerSeat" Percent="@r.FairSharePercent" Label="@($"{r.Login}: credits against fair share")" />
@@ -147,13 +156,18 @@
                 </table>
             }
 
-            <p class="note"><Icon Name="info" Size="14" /> <span><strong>Fair share</strong> is @Fmt.Credits(Copilot.Value.CreditsPerSeat) credits per user, a benchmark set by this dashboard. It is not a GitHub limit: the pool is shared by the whole organization.</span></p>
+            <p class="note"><Icon Name="info" Size="14" /> <span><strong>Fair share</strong> is @Fmt.Credits(Copilot.Value.CreditsPerSeat) credits per user, a benchmark set by this dashboard. It is not a GitHub limit: the pool is shared by the whole @Scope.Noun.</span></p>
         </GlassCard>
     }
 </div>
 
 @code {
     private sealed record Column(UserSort Sort, string Title, bool Numeric);
+
+    private static readonly Column OrgColumn = new(UserSort.Organization, "Organization", false);
+
+    private IEnumerable<Column> ShownColumns => _showOrg ? Columns.Take(1).Append(OrgColumn).Concat(Columns.Skip(1)) : Columns;
+    private bool _showOrg;
 
     private static readonly Column[] Columns =
     [
@@ -186,7 +200,7 @@
         : $"{Fmt.Number(_view.Count)} of {Fmt.Plural(_rows.Count, "user")} match";
 
     private string SortDescription =>
-        $"{Columns.First(c => c.Sort == _sort).Title.ToLowerInvariant()}, {(_desc ? "descending" : "ascending")}";
+        $"{ShownColumns.FirstOrDefault(c => c.Sort == _sort)?.Title?.ToLowerInvariant() ?? "credits"}, {(_desc ? "descending" : "ascending")}";
 
     protected override async Task OnInitializedAsync()
     {
@@ -205,6 +219,8 @@
             var queries = scope.ServiceProvider.GetRequiredService<UsageQueries>();
             _month = queries.CurrentMonth;
             _rows = await queries.GetUsersTableAsync();
+            _showOrg = UsersTable.ShowOrganization(_rows);
+            if (!_showOrg && _sort == UserSort.Organization) (_sort, _desc) = (UserSort.Credits, true);
             _loadError = null;
             Recompute();
         }

@@ -41,7 +41,8 @@ public sealed record UserRow(
     decimal? AcceptanceRate,
     string? TopModel,
     DateTimeOffset? LastActiveAt,
-    bool SeatActive);
+    bool SeatActive,
+    string? Organization = null);
 
 public sealed record DailyCredit(DateOnly Day, decimal Credits, decimal Cumulative);
 
@@ -86,6 +87,8 @@ public sealed record UserDetail(
     string Login,
     string? AvatarUrl,
     string? AssigningTeam,
+    string? Organization,
+    bool MultipleOrganizations,
     bool SeatActive,
     DateTimeOffset? LastActivityAt,
     string? LastActivityEditor,

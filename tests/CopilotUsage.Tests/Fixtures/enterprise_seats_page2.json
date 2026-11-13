@@ -1,0 +1,18 @@
+{
+  "total_seats": 3,
+  "seats": [
+    {
+      "created_at": "2026-04-02T11:00:00Z",
+      "last_activity_at": "2026-11-05T08:00:00Z",
+      "plan_type": "business",
+      "assignee": { "login": "OCTO-ALICE", "id": 1001 },
+      "organization": { "login": "org-b", "id": 12 }
+    },
+    {
+      "created_at": "2026-05-02T11:00:00Z",
+      "plan_type": "business",
+      "assignee": { "login": "octo-carol", "id": 1003 },
+      "organization": { "login": "org-b", "id": 12 }
+    }
+  ]
+}

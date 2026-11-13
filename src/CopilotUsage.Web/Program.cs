@@ -44,6 +44,8 @@ builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection(SyncOpt
 builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOptions.SectionName));
 builder.Services.Configure<AzureAdOptions>(builder.Configuration.GetSection(AzureAdOptions.SectionName));
 
+builder.Services.AddSingleton(sp => GitHubScope.Resolve(
+    sp.GetRequiredService<IOptions<GitHubOptions>>().Value, sp.GetRequiredService<IOptions<DemoOptions>>().Value.Enabled));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddCopilotUsageData(ResolveConnectionString(builder));
 builder.Services.AddGitHubClient();
@@ -79,7 +81,17 @@ if (demo)
     app.Logger.LogInformation("Demo mode (scenario: {Scenario}): GitHub is not contacted; the database is filled with synthetic data.",
         app.Configuration["Demo:Scenario"] ?? "normal");
 else
-    app.Logger.LogInformation("Live mode: syncing from GitHub organization {Org}.", app.Configuration["GitHub:Org"]);
+{
+    var scope = app.Services.GetRequiredService<GitHubScope>();
+    if (scope.IsEnterprise)
+    {
+        app.Logger.LogInformation("Live mode, enterprise scope: syncing from GitHub enterprise {Enterprise}. The pool is every seat in the enterprise.", scope.Slug);
+        if (!string.IsNullOrWhiteSpace(app.Configuration["GitHub:Org"]))
+            app.Logger.LogInformation("GitHub:Org is also set and is ignored because GitHub:Enterprise is set (enterprise scope wins).");
+    }
+    else
+        app.Logger.LogInformation("Live mode, organization scope: syncing from GitHub organization {Org}.", scope.Slug);
+}
 
 // Migrate, then (demo only) seed before serving so the first page view already has data.
 await using (var scope = app.Services.CreateAsyncScope())

@@ -11,10 +11,13 @@ namespace CopilotUsage.Tests.Ui;
 
 public class ComponentTests : BunitContext
 {
+    private CopilotUsage.GitHub.GitHubScope Scope { get; set; } = new(CopilotUsage.GitHub.GitHubScopeKind.Organization, null);
+
     private static PoolSummary Pool(decimal used) => PoolCalculator.Summarize(25, 1900m, used);
 
     private IRenderedComponent<CopilotUsage.Web.Components.Layout.MainLayout> RenderLayout(bool signInEnabled, string? user = null, params System.Security.Claims.Claim[] claims)
     {
+        Services.AddSingleton(Scope);
         Services.AddSingleton(Options.Create(new CopilotUsage.Web.Config.DemoOptions()));
         Services.AddSingleton(new CopilotUsage.Web.Config.AuthMode(signInEnabled));
         var auth = AddAuthorization();

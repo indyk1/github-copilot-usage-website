@@ -106,7 +106,8 @@ public sealed class UsageQueries(CopilotUsageDbContext db, TimeProvider time, IO
                 mt.Gen > 0 ? (decimal)mt.Acc / mt.Gen : null,
                 topModels.GetValueOrDefault(s.Login),
                 lastActive,
-                s.IsActive));
+                s.IsActive,
+                s.Organization));
         }
         return rows.OrderByDescending(r => r.Credits).ThenBy(r => r.Login, StringComparer.OrdinalIgnoreCase).ToList();
     }
@@ -166,7 +167,9 @@ public sealed class UsageQueries(CopilotUsageDbContext db, TimeProvider time, IO
         var poolLimit = PoolCalculator.Limit(seatCount, CreditsPerSeat);
 
         return new UserDetail(
-            m, canonical, seat?.AvatarUrl, seat?.AssigningTeam, seat?.IsActive ?? false,
+            m, canonical, seat?.AvatarUrl, seat?.AssigningTeam, seat?.Organization,
+            SeatOrganizations.HasMany(await db.Seats.AsNoTracking().Where(s => s.IsActive).Select(s => s.Organization).ToListAsync(ct)),
+            seat?.IsActive ?? false,
             seat?.LastActivityAt, seat?.LastActivityEditor,
             credits, PoolCalculator.ToDollars(credits), CreditsPerSeat,
             Leaderboard.FairSharePercent(credits, CreditsPerSeat),

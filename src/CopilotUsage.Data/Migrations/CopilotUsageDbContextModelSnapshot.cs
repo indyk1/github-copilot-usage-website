@@ -84,6 +84,9 @@ namespace CopilotUsage.Data.Migrations
                         .HasColumnType("TEXT")
                         .UseCollation("NOCASE");
 
+                    b.Property<string>("Organization")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("PlanType")
                         .HasColumnType("TEXT");
 
@@ -119,10 +122,10 @@ namespace CopilotUsage.Data.Migrations
                     b.Property<int>("InactiveThisCycle")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("PendingCancellation")
+                    b.Property<int?>("PendingCancellation")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("PendingInvitation")
+                    b.Property<int?>("PendingInvitation")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("PlanType")

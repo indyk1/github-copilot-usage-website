@@ -102,6 +102,28 @@ public class UsersTableTests
         Assert.Null(UsersTable.ParseKey("nonsense"));
         Assert.Null(UsersTable.ParseKey(null));
     }
+
+    [Fact]
+    public void Organization_sort_key_round_trips_and_missing_organizations_sort_last()
+    {
+        Assert.Equal(UserSort.Organization, UsersTable.ParseKey(UsersTable.Key(UserSort.Organization)));
+        Assert.False(UsersTable.DefaultDescending(UserSort.Organization));
+        var rows = new[]
+        {
+            Row("a") with { Organization = "org-b" }, Row("b"), Row("c") with { Organization = "org-a" },
+        };
+        Assert.Equal(["c", "a", "b"], Logins(UsersTable.Sort(rows, UserSort.Organization, false)));
+        Assert.Equal(["a", "c", "b"], Logins(UsersTable.Sort(rows, UserSort.Organization, true)));
+    }
+
+    [Fact]
+    public void ShowOrganization_needs_two_distinct_organizations()
+    {
+        Assert.False(UsersTable.ShowOrganization(Rows));
+        Assert.False(UsersTable.ShowOrganization([Row("a") with { Organization = "x" }, Row("b") with { Organization = "X" }]));
+        Assert.True(UsersTable.ShowOrganization([Row("a") with { Organization = "x" }, Row("b") with { Organization = "y" }]));
+        Assert.True(UsersTable.ShowOrganization([Row("a") with { Organization = "x, y" }]));
+    }
 }
 
 public class LabelsTests

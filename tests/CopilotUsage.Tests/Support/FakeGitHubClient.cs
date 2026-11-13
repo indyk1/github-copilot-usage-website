@@ -29,14 +29,24 @@ public sealed class FakeGitHubClient : IGitHubClient
 
     public async Task<SeatSummary> GetSeatSummaryAsync(CancellationToken ct = default)
     {
+        SeatSummaryCalls++;
         if (BeforeSeats is not null) await BeforeSeats();
         return Summary;
     }
 
-    public async Task<IReadOnlyList<SeatInfo>> GetSeatsAsync(CancellationToken ct = default)
+    /// <summary>What the fake reports as total_seats (null: none).</summary>
+    public int? ReportedTotal { get; set; }
+    public int SeatSummaryCalls { get; private set; }
+    public int SeatListCalls { get; private set; }
+
+    public async Task<IReadOnlyList<SeatInfo>> GetSeatsAsync(CancellationToken ct = default) =>
+        (await GetSeatListAsync(ct)).Seats;
+
+    public async Task<SeatList> GetSeatListAsync(CancellationToken ct = default)
     {
+        SeatListCalls++;
         if (BeforeSeats is not null) await BeforeSeats();
-        return Seats.ToList();
+        return new SeatList(Seats.ToList(), ReportedTotal);
     }
 
     public Task<IReadOnlyList<CreditUsageRecord>> GetCreditUsageAsync(CreditUsageQuery query, CancellationToken ct = default)

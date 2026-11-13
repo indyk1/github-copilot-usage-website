@@ -113,7 +113,7 @@ public class SyncServiceTests
     public async Task A_failing_step_is_recorded_and_the_other_steps_still_run()
     {
         var fake = Fake();
-        fake.FailMetrics = () => new GitHubApiException("boom: metrics policy disabled");
+        fake.FailMetrics = () => new GitHubApiException("boom: metrics policy disabled", System.Net.HttpStatusCode.NotFound, "/orgs/acme/copilot/metrics/reports/users-28-day/latest", hint: "Check the metrics policy.");
         await using var host = new TestHost(Now, github: fake);
 
         var result = await host.Sync.RunAsync(SyncTrigger.Manual); // must not throw
@@ -124,7 +124,11 @@ public class SyncServiceTests
 
         var run = await host.WithDbAsync(db => db.SyncRuns.SingleAsync());
         Assert.Equal(SyncStatus.PartialFailure, run.Status);
-        Assert.Contains("metrics policy disabled", run.Error);
+        Assert.Contains("UserMetrics step", run.Error);   // which step
+        Assert.Contains("HTTP 404", run.Error);           // which status
+        Assert.Contains("Check the metrics policy.", run.Error);
+        Assert.DoesNotContain("boom", run.Error);         // the exception text (GitHub's wording, the path) stays out of the stored log
+        Assert.DoesNotContain("/orgs/acme", run.Error);
         await host.WithDbAsync(async db => { Assert.Equal(3, await db.Seats.CountAsync()); Assert.NotEmpty(db.CreditUsageDaily); return 0; });
     }
 

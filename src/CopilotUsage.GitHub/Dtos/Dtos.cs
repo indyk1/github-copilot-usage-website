@@ -36,6 +36,13 @@ public sealed class SeatDto
     [JsonPropertyName("plan_type")] public string? PlanType { get; set; }
     [JsonPropertyName("assignee")] public AssigneeDto? Assignee { get; set; }
     [JsonPropertyName("assigning_team")] public AssigningTeamDto? AssigningTeam { get; set; }
+    /// <summary>The organization that assigned the seat, when the API carries it (enterprise scope; unverified).</summary>
+    [JsonPropertyName("organization")] public OrganizationDto? Organization { get; set; }
+}
+
+public sealed class OrganizationDto
+{
+    [JsonPropertyName("login")] public string? Login { get; set; }
 }
 
 public sealed class AssigneeDto

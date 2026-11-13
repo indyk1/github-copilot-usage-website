@@ -34,7 +34,7 @@ else
     </ol>
 
     <div class="foot">
-        <p class="note"><Icon Name="info" Size="14" /> <span><strong>Fair share</strong> is @Fmt.Credits(FairShare) credits per user, a benchmark set by this dashboard. It is not a GitHub limit: the pool is shared by the whole organization.</span></p>
+        <p class="note"><Icon Name="info" Size="14" /> <span><strong>Fair share</strong> is @Fmt.Credits(FairShare) credits per user, a benchmark set by this dashboard. It is not a GitHub limit: the pool is shared by the whole @ScopeNoun.</span></p>
         @if (Rows.Count > Collapsed)
         {
             <button type="button" class="btn" aria-expanded="@_expanded.ToString().ToLowerInvariant()" aria-controls="leaderboard-list" @onclick="() => _expanded = !_expanded">
@@ -48,6 +48,8 @@ else
     [Parameter, EditorRequired] public IReadOnlyList<LeaderboardRow> Rows { get; set; } = [];
     /// <summary>Credits per seat, the benchmark each bar is measured against.</summary>
     [Parameter] public decimal FairShare { get; set; } = 1900m;
+    /// <summary>"organization" or "enterprise", for the fair-share note.</summary>
+    [Parameter] public string ScopeNoun { get; set; } = "organization";
     /// <summary>Rows shown before "show all".</summary>
     [Parameter] public int Collapsed { get; set; } = 10;
 

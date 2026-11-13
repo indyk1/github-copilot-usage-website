@@ -2,16 +2,20 @@ using CopilotUsage.Data.Queries;
 
 namespace CopilotUsage.Web.Ui;
 
-public enum UserSort { User, Credits, FairShare, Prompts, Acceptance, TopModel, LastActive }
+public enum UserSort { User, Credits, FairShare, Prompts, Acceptance, TopModel, LastActive, Organization }
 
 /// <summary>Search, sort and "inactive" rules for the users table, kept out of the component so they can be tested.</summary>
 public static class UsersTable
 {
+    /// <summary>The organization column is shown only when the seats name more than one distinct organization (otherwise every row would repeat the same value).</summary>
+    public static bool ShowOrganization(IEnumerable<UserRow> rows) =>
+        CopilotUsage.Core.Models.SeatOrganizations.HasMany(rows.Select(r => r.Organization));
+
     /// <summary>A seat with no credits and no prompts this month. Such seats are marked, never hidden.</summary>
     public static bool IsInactive(UserRow row) => row.Credits <= 0m && row.Prompts <= 0;
 
     /// <summary>Text columns start A to Z; number and date columns start with the highest or newest.</summary>
-    public static bool DefaultDescending(UserSort sort) => sort is not (UserSort.User or UserSort.TopModel);
+    public static bool DefaultDescending(UserSort sort) => sort is not (UserSort.User or UserSort.TopModel or UserSort.Organization);
 
     /// <summary>Clicking the current column flips its direction; clicking another column starts at that column's default.</summary>
     public static (UserSort Sort, bool Descending) Toggle(UserSort current, bool descending, UserSort clicked) =>
@@ -43,6 +47,7 @@ public static class UsersTable
             UserSort.Prompts => Order(present, r => r.Prompts, Comparer<long>.Default, descending),
             UserSort.Acceptance => Order(present, r => r.AcceptanceRate ?? 0m, Comparer<decimal>.Default, descending),
             UserSort.TopModel => Order(present, r => r.TopModel ?? "", StringComparer.OrdinalIgnoreCase, descending),
+            UserSort.Organization => Order(present, r => r.Organization ?? "", StringComparer.OrdinalIgnoreCase, descending),
             _ => Order(present, r => r.LastActiveAt ?? DateTimeOffset.MinValue, Comparer<DateTimeOffset>.Default, descending),
         };
         return ordered.ThenBy(r => r.Login, StringComparer.OrdinalIgnoreCase)
@@ -53,6 +58,7 @@ public static class UsersTable
     {
         UserSort.Acceptance => r.AcceptanceRate is not null,
         UserSort.TopModel => !string.IsNullOrWhiteSpace(r.TopModel),
+        UserSort.Organization => !string.IsNullOrWhiteSpace(r.Organization),
         UserSort.LastActive => r.LastActiveAt is not null,
         UserSort.FairShare => r.FairSharePercent is not null,
         _ => true,
@@ -69,12 +75,12 @@ public static class UsersTable
     public static string Key(UserSort sort) => sort switch
     {
         UserSort.User => "user", UserSort.Credits => "credits", UserSort.FairShare => "fair", UserSort.Prompts => "prompts",
-        UserSort.Acceptance => "acceptance", UserSort.TopModel => "model", _ => "active",
+        UserSort.Acceptance => "acceptance", UserSort.TopModel => "model", UserSort.Organization => "org", _ => "active",
     };
 
     public static UserSort? ParseKey(string? key) => key?.ToLowerInvariant() switch
     {
         "user" => UserSort.User, "credits" => UserSort.Credits, "fair" => UserSort.FairShare, "prompts" => UserSort.Prompts,
-        "acceptance" => UserSort.Acceptance, "model" => UserSort.TopModel, "active" => UserSort.LastActive, _ => null,
+        "acceptance" => UserSort.Acceptance, "model" => UserSort.TopModel, "active" => UserSort.LastActive, "org" => UserSort.Organization, _ => null,
     };
 }

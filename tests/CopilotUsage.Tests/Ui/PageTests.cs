@@ -18,7 +18,7 @@ public class PageTests : BunitContext
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 11, 10, 0, 0, TimeSpan.Zero);
 
-    private async Task<TestHost> HostAsync(bool seed = true)
+    private async Task<TestHost> HostAsync(bool seed = true, CopilotUsage.GitHub.GitHubScope? scope = null)
     {
         var host = new TestHost(Now, demo: true);
         if (seed) Assert.Equal(SyncStatus.Succeeded, (await host.Sync.RunAsync(SyncTrigger.Demo)).Status);
@@ -26,6 +26,7 @@ public class PageTests : BunitContext
         Services.AddScoped(_ => host.Services.CreateScope().ServiceProvider.GetRequiredService<UsageQueries>());
         Services.AddSingleton<TimeProvider>(host.Time);
         Services.AddSingleton(Options.Create(new CopilotOptions()));
+        Services.AddSingleton(scope ?? new CopilotUsage.GitHub.GitHubScope(CopilotUsage.GitHub.GitHubScopeKind.Organization, null));
         Services.AddLogging(b => b.SetMinimumLevel(LogLevel.None));
         JSInterop.Mode = JSRuntimeMode.Loose;
         return host;

@@ -2,6 +2,7 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IDisposable
 @using CopilotUsage.Core
+@using CopilotUsage.GitHub
 @using CopilotUsage.Data.Entities
 @using CopilotUsage.Data.Queries
 @using CopilotUsage.Web.Config
@@ -11,6 +12,7 @@
 @inject TimeProvider Time
 @inject IOptions<DemoOptions> Demo
 @inject IOptions<CopilotOptions> Copilot
+@inject GitHubScope Scope
 @inject ILogger<Home> Logger
 
 <PageTitle>Overview · Copilot Usage</PageTitle>
@@ -18,7 +20,7 @@
 <div class="home">
     <header class="page-head">
         <div class="titles">
-            <p class="eyebrow">Organization overview@(_summary is null ? null : " · " + Fmt.Month(_summary.Month))</p>
+            <p class="eyebrow">@(Scope.IsEnterprise ? "Enterprise" : "Organization") overview@(_summary is null ? null : " · " + Fmt.Month(_summary.Month))</p>
             <h1>Copilot AI credits</h1>
         </div>
 
@@ -123,7 +125,7 @@
         <GlassCard Class="empty">
             <Icon Name="users" Size="28" />
             <h2>No Copilot seats found</h2>
-            <p>The last sync found no Copilot seats in the organization, so there is no credit pool to measure. Assign seats on GitHub, then press Refresh.</p>
+            <p>The last sync found no Copilot seats in the @Scope.Noun, so there is no credit pool to measure. Assign seats on GitHub, then press Refresh.</p>
         </GlassCard>
     }
     else
@@ -183,20 +185,20 @@
             </GlassCard>
 
             <GlassCard aria-labelledby="models-h" Class="models-card">
-                <SectionHeading Id="models-h" Title="Model split" Subtitle="Org-wide credits by model this month." />
+                <SectionHeading Id="models-h" Title="Model split" Subtitle="@($"{(Scope.IsEnterprise ? "Enterprise-wide" : "Org-wide")} credits by model this month.")" />
                 <ModelBars Models="_summary.ModelSplit" />
             </GlassCard>
         </div>
 
         <GlassCard aria-labelledby="board-h" Class="board-card">
             <SectionHeading Id="board-h" Title="Leaderboard" Subtitle="Credits used this month, highest first." />
-            <Leaderboard Rows="_rows" FairShare="pool.CreditsPerSeat" />
+            <Leaderboard Rows="_rows" FairShare="pool.CreditsPerSeat" ScopeNoun="@Scope.Noun" />
         </GlassCard>
     }
 </div>
 
 @code {
-    private const int MaxErrorLength = 240;
+    private const int MaxErrorLength = 420;
 
     private HomeSummary? _summary;
     private IReadOnlyList<LeaderboardRow> _rows = [];

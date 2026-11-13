@@ -49,6 +49,7 @@ public sealed class UsageWriter(CopilotUsageDbContext db)
             row.UpdatedAt = s.UpdatedAt;
             row.PlanType = s.PlanType;
             row.AssigningTeam = s.AssigningTeam;
+            row.Organization = s.Organization;
             row.LastActivityAt = s.LastActivityAt;
             row.LastActivityEditor = s.LastActivityEditor;
             row.IsActive = true;

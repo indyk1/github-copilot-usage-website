@@ -206,6 +206,6 @@ public class GitHubClientTests
     public void Every_endpoint_path_is_defined_in_GitHubEndpoints()
     {
         Assert.Equal("/orgs/o%2Fx/copilot/billing", GitHubEndpoints.SeatSummary("o/x"));
-        Assert.Equal("/orgs/acme/copilot/billing/seats?per_page=100&page=3", GitHubEndpoints.Seats("acme", 3, 100));
+        Assert.Equal("/orgs/acme/copilot/billing/seats?per_page=100&page=3", GitHubEndpoints.Seats(new GitHubScope(GitHubScopeKind.Organization, "acme"), 3, 100));
     }
 }

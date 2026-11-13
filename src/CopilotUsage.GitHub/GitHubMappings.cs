@@ -40,7 +40,46 @@ public static class GitHubMappings
             dto.PlanType,
             dto.AssigningTeam?.Name ?? dto.AssigningTeam?.Slug,
             ParseTimestamp(dto.LastActivityAt),
-            dto.LastActivityEditor);
+            dto.LastActivityEditor,
+            string.IsNullOrWhiteSpace(dto.Organization?.Login) ? null : dto.Organization.Login.Trim());
+    }
+
+    /// <summary>
+    /// Enterprise scope has no billing-summary endpoint, so the counts come from the seat list (already de-duplicated by login):
+    /// total = distinct seats; added = created in the current UTC month; active = last activity in the current UTC month;
+    /// inactive = total - active; plan type = the distinct seat plan types. Pending invitations and pending cancellations are
+    /// not derivable and stay null (unavailable).
+    /// </summary>
+    public static SeatSummary DeriveSeatSummary(IReadOnlyList<SeatInfo> seats, DateTimeOffset now)
+    {
+        var monthStart = new DateTimeOffset(now.UtcDateTime.Year, now.UtcDateTime.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var active = seats.Count(s => s.LastActivityAt is { } a && a >= monthStart);
+        var plans = seats.Select(s => s.PlanType).Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p!.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        return new SeatSummary(
+            plans.Count == 0 ? null : string.Join("+", plans),
+            seats.Count,
+            seats.Count(s => s.CreatedAt is { } c && c >= monthStart),
+            null,
+            null,
+            active,
+            seats.Count - active);
+    }
+
+    /// <summary>Merges rows for one login (a user reachable through several organizations): first non-empty value wins, organizations are joined.</summary>
+    public static SeatInfo MergeSeatRows(IReadOnlyList<SeatInfo> rows)
+    {
+        var first = rows[0];
+        var orgs = rows.SelectMany(r => SeatOrganizations.Split(r.Organization)).Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase).ToList();
+        return first with
+        {
+            AvatarUrl = rows.Select(r => r.AvatarUrl).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+            AssigningTeam = rows.Select(r => r.AssigningTeam).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+            PlanType = rows.Select(r => r.PlanType).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+            LastActivityAt = rows.Max(r => r.LastActivityAt),
+            Organization = orgs.Count == 0 ? null : string.Join(", ", orgs),
+        };
     }
 
     /// <summary>

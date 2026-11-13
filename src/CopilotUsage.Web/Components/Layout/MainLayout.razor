@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @inject IOptions<DemoOptions> Demo
 @inject AuthMode Auth
+@inject GitHubScope Scope
 
 <a class="skip-link" href="#main">Skip to content</a>
 <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -59,7 +60,7 @@
     </main>
 
     <footer class="footer">
-        <p>AI credits: 1 credit = $0.01. The pool is shared across the organization and resets at 00:00 UTC on the 1st.</p>
+        <p>AI credits: 1 credit = $0.01. The pool is shared across the @Scope.Noun and resets at 00:00 UTC on the 1st.</p>
         <p class="ver" title="Version and commit of this deployment">Version @AppVersion.Full</p>
     </footer>
 </div>

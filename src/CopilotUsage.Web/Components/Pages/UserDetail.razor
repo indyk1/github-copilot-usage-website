@@ -1,9 +1,11 @@
 @page "/users/{Login}"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using CopilotUsage.Data.Queries
+@using CopilotUsage.GitHub
 @using UserRecord = CopilotUsage.Data.Queries.UserDetail
 @inject IServiceScopeFactory Scopes
 @inject TimeProvider Time
+@inject GitHubScope Scope
 @inject ILogger<UserDetail> Logger
 
 <PageTitle>@(_detail?.Login ?? (_notFound ? "User not found" : Login)) · Copilot Usage</PageTitle>
@@ -53,6 +55,7 @@
                     @if (noUsage) { <StatusBadge Tone="StatusBadge.BadgeTone.Info" Icon="clock" Text="No usage this month" /> }
                     @if (!d.SeatActive) { <StatusBadge Tone="StatusBadge.BadgeTone.Warn" Text="Seat ended" /> }
                     @if (!string.IsNullOrWhiteSpace(d.AssigningTeam)) { <span class="chip">Team @d.AssigningTeam</span> }
+                    @if (d.MultipleOrganizations && !string.IsNullOrWhiteSpace(d.Organization)) { <span class="chip">Organization @d.Organization</span> }
                 </div>
             </div>
         </header>
@@ -82,13 +85,13 @@
                     <Value><CountUp Value="d.Dollars" Decimals="2" Prefix="$" Text="@Fmt.Dollars(d.Dollars)" /></Value>
                     <Hint>@Fmt.Credits(d.Credits) credits at $0.01 each</Hint>
                 </StatTile>
-                <StatTile Label="Share of org pool" Icon="users">
+                <StatTile Label="@($"Share of {Scope.Noun} pool")" Icon="users">
                     <Value><span class="num">@Fmt.Percent(d.ShareOfPoolPercent, 1)</span></Value>
-                    <Hint>of the organization's @Fmt.Credits(d.PoolLimit) credit pool</Hint>
+                    <Hint>of the @(Scope.Noun)'s @Fmt.Credits(d.PoolLimit) credit pool</Hint>
                 </StatTile>
             </div>
 
-            <p class="note"><Icon Name="info" Size="14" /> <span><strong>Fair share</strong> is @Fmt.Credits(d.FairShare) credits per user. It is this dashboard's benchmark, not a GitHub limit: the pool is shared by the whole organization.</span></p>
+            <p class="note"><Icon Name="info" Size="14" /> <span><strong>Fair share</strong> is @Fmt.Credits(d.FairShare) credits per user. It is this dashboard's benchmark, not a GitHub limit: the pool is shared by the whole @Scope.Noun.</span></p>
 
             <div class="daily-head">
                 <h3>Credits per day</h3>

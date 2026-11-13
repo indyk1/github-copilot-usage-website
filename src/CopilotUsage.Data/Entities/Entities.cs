@@ -12,6 +12,8 @@ public class Seat
     public DateTimeOffset? UpdatedAt { get; set; }
     public string? PlanType { get; set; }
     public string? AssigningTeam { get; set; }
+    /// <summary>Organization(s) that assigned the seat, comma separated, when the API says (null otherwise).</summary>
+    public string? Organization { get; set; }
     public DateTimeOffset? LastActivityAt { get; set; }
     public string? LastActivityEditor { get; set; }
     public bool IsActive { get; set; } = true;
@@ -28,8 +30,10 @@ public class SeatSnapshot
     public string? PlanType { get; set; }
     public int TotalSeats { get; set; }
     public int AddedThisCycle { get; set; }
-    public int PendingInvitation { get; set; }
-    public int PendingCancellation { get; set; }
+    /// <summary>Null when the source cannot say (enterprise scope has no billing summary).</summary>
+    public int? PendingInvitation { get; set; }
+    /// <summary>Null when the source cannot say (enterprise scope has no billing summary).</summary>
+    public int? PendingCancellation { get; set; }
     public int ActiveThisCycle { get; set; }
     public int InactiveThisCycle { get; set; }
 }

@@ -33,8 +33,11 @@ public static class StartupConfigValidator
 
         if (!demo.Enabled)
         {
-            if (string.IsNullOrWhiteSpace(gh.Org))
-                errors.Add("GitHub:Org is required when Demo:Enabled is false. Set it in configuration (e.g. environment variable GitHub__Org).");
+            if (string.IsNullOrWhiteSpace(gh.Org) && string.IsNullOrWhiteSpace(gh.Enterprise))
+                errors.Add("GitHub:Enterprise or GitHub:Org is required when Demo:Enabled is false. Set GitHub:Enterprise (environment variable GitHub__Enterprise) when the organization is part of a GitHub Enterprise account that holds the Copilot billing, otherwise GitHub:Org (GitHub__Org). If both are set the enterprise is used and the organization is ignored.");
+            foreach (var (key, value) in new[] { ("GitHub:Enterprise", gh.Enterprise), ("GitHub:Org", gh.Org) })
+                if (!string.IsNullOrWhiteSpace(value) && !System.Text.RegularExpressions.Regex.IsMatch(value.Trim(), "^[A-Za-z0-9][A-Za-z0-9_.-]*$"))
+                    errors.Add($"{key} must be a slug (letters, digits, hyphens), not a URL or a name with spaces.");
             if (string.IsNullOrWhiteSpace(gh.Token))
                 errors.Add("GitHub:Token is required when Demo:Enabled is false. Supply it from configuration only (user secrets, environment variable GitHub__Token, or a Key Vault reference), never from a file in the repo. To explore without GitHub set Demo:Enabled=true.");
             else if (gh.Token.TrimStart().StartsWith("@Microsoft.KeyVault", StringComparison.OrdinalIgnoreCase))

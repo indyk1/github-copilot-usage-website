@@ -13,13 +13,14 @@ namespace CopilotUsage.Web.Sync;
 
 /// <summary>
 /// The four sync steps from PLAN.md section 5 (seats; org credits by day; credits per user per model;
-/// per-user metrics), or a single demo-seed step in demo mode. Each step gets its own DI scope and
+/// per-user metrics), or a single demo-seed step in demo mode. In enterprise scope the "org" steps cover the whole enterprise. Each step gets its own DI scope and
 /// DbContext, so one failing step cannot poison the next. Every upsert is idempotent.
 /// </summary>
 public sealed class SyncService(
     IServiceScopeFactory scopes,
     TimeProvider time,
     IOptions<DemoOptions> demo,
+    GitHubScope scope,
     ILogger<SyncService> logger) : ISyncService
 {
     private const int GiveUpAfterConsecutiveFailures = 3;
@@ -83,7 +84,7 @@ public sealed class SyncService(
         var status = steps.All(s => s.Status == SyncStatus.Succeeded) ? SyncStatus.Succeeded
             : steps.All(s => s.Status == SyncStatus.Failed) ? SyncStatus.Failed
             : SyncStatus.PartialFailure;
-        var firstError = steps.FirstOrDefault(s => s.Error is not null)?.Error;
+        var firstError = steps.FirstOrDefault(s => s.Error is not null)?.Error;   // each error already names its step
         await FinishRunAsync(runId, status, steps, firstError);
 
         if (status == SyncStatus.Succeeded) logger.LogInformation("Sync {RunId} succeeded: {Steps}", runId, Describe(steps));
@@ -118,7 +119,7 @@ public sealed class SyncService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Sync step {Step} failed.", name);
-            return new SyncStepResult(name, SyncStatus.Failed, 0, 1, Truncate($"{ex.GetType().Name}: {ex.Message}"));
+            return new SyncStepResult(name, SyncStatus.Failed, 0, 1, Truncate(SafeDescribe(ex, $"{name} step")));
         }
     }
 
@@ -134,6 +135,32 @@ public sealed class SyncService(
         int rows = 0, errors = 0;
         string? first = null;
 
+        if (scope.IsEnterprise)
+        {
+            // No enterprise billing-summary endpoint is known: one pass over the seat list gives both the seats and the counts.
+            try
+            {
+                var list = await client.GetSeatListAsync(ct);
+                if (list.Seats.Count == 0 && list.ReportedTotal > 0)
+                {
+                    errors++;
+                    first ??= $"Seats step (seats): the endpoint returned no seats but reported total_seats={list.ReportedTotal}; seat list left unchanged.";
+                    logger.LogWarning("{Message}", first);
+                }
+                else
+                {
+                    await writer.UpsertSeatSummaryAsync(GitHubMappings.DeriveSeatSummary(list.Seats, now), now, ct);
+                    rows++;
+                    rows += await writer.UpsertSeatsAsync(list.Seats, now, ct);
+                }
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                Fail(ex, "Seats step (seats)", ref errors, ref first);
+            }
+            return new StepOutcome(rows, errors, first);
+        }
+
         SeatSummary? summary = null;
         try
         {
@@ -143,7 +170,7 @@ public sealed class SyncService(
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            Fail(ex, "seat summary", ref errors, ref first);
+            Fail(ex, "Seats step (seat summary)", ref errors, ref first);
         }
 
         try
@@ -152,7 +179,7 @@ public sealed class SyncService(
             if (seats.Count == 0 && summary?.TotalSeats > 0)
             {
                 errors++;
-                first ??= $"Seats endpoint returned no seats but the summary reports {summary.TotalSeats}; seat list left unchanged.";
+                first ??= $"Seats step (seats): the endpoint returned no seats but the summary reports {summary.TotalSeats}; seat list left unchanged.";
                 logger.LogWarning("{Message}", first);
             }
             else
@@ -162,7 +189,7 @@ public sealed class SyncService(
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            Fail(ex, "seats", ref errors, ref first);
+            Fail(ex, "Seats step (seats)", ref errors, ref first);
         }
         return new StepOutcome(rows, errors, first);
     }
@@ -188,7 +215,7 @@ public sealed class SyncService(
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
-                    Fail(ex, $"org credits for {day:yyyy-MM-dd}", ref errors, ref first);
+                    Fail(ex, $"OrgCreditsByDay step ({(scope.IsEnterprise ? "enterprise" : "organization")} credits for {day:yyyy-MM-dd})", ref errors, ref first);
                     if (++consecutive >= GiveUpAfterConsecutiveFailures) return Abandoned(rows, errors, first);
                 }
             }
@@ -217,7 +244,7 @@ public sealed class SyncService(
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                Fail(ex, $"credits for {login} in {month}", ref errors, ref first);
+                Fail(ex, $"UserCreditsByModel step (credits for {login} in {month})", ref errors, ref first);
                 if (++consecutive >= GiveUpAfterConsecutiveFailures) return Abandoned(rows, errors, first);
             }
         }
@@ -248,7 +275,7 @@ public sealed class SyncService(
     private void Fail(Exception ex, string what, ref int errors, ref string? first)
     {
         errors++;
-        first ??= Truncate($"{what}: {ex.Message}");
+        first ??= Truncate(SafeDescribe(ex, what));
         logger.LogError(ex, "Sync failed fetching {What}.", what);
     }
 
@@ -287,8 +314,22 @@ public sealed class SyncService(
         }
     }
 
+    /// <summary>
+    /// What is stored in the sync log and shown in the banner: the step, the HTTP status and a hint. Never the request path,
+    /// GitHub's own message text, a token or any response data (those go to the application log only). Failures that are not
+    /// GitHub responses (network, timeout, database) keep their exception message.
+    /// </summary>
+    internal static string SafeDescribe(Exception ex, string what) => ex switch
+    {
+        GitHubApiException { StatusCode: { } code } g =>
+            $"{what} failed: GitHub answered HTTP {(int)code} {code}.{(string.IsNullOrWhiteSpace(g.Hint) ? "" : " " + g.Hint)}",
+        GitHubApiException => $"{what} failed: GitHub returned a response the app could not read.",
+        // Other failures (network down, timeout, database) carry no GitHub response text; their message is what the log used to show.
+        _ => $"{what} failed: {ex.GetType().Name}: {ex.Message}",
+    };
+
     private static string Describe(IEnumerable<SyncStepResult> steps) =>
         string.Join(", ", steps.Select(s => $"{s.Step}={s.Status}({s.Rows} rows, {s.Errors} errors)"));
 
-    private static string Truncate(string s) => s.Length <= 500 ? s : s[..500];
+    private static string Truncate(string s) => s.Length <= 600 ? s : s[..600];
 }
