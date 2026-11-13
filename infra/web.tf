@@ -17,7 +17,7 @@ locals {
       "Sync__IntervalHours" = tostring(var.sync_interval_hours)
 
       # GitHub. The token is a Key Vault reference (no version, so a rotated secret is picked up). The value is set by hand.
-      "GitHub__Org"   = var.github_org
+      # GitHub__Enterprise and GitHub__Org are added below, only when given (the enterprise wins when both are set).
       "GitHub__Token" = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.main.name};SecretName=${local.token_secret_name})"
 
       "Copilot__CreditsPerSeat" = tostring(var.credits_per_seat)
@@ -31,6 +31,8 @@ locals {
       # /home is persistent for the built-in .NET image by default; stated explicitly so nobody switches it off by accident.
       "WEBSITES_ENABLE_APP_SERVICE_STORAGE" = "true"
     },
+    var.github_enterprise != "" ? { "GitHub__Enterprise" = var.github_enterprise } : {},
+    var.github_org != "" ? { "GitHub__Org" = var.github_org } : {},
     var.entra_app_id_uri != "" ? { "AzureAd__AppIdUri" = var.entra_app_id_uri } : {},
     var.web_public_base_url != "" ? { "AzureAd__PublicBaseUrl" = var.web_public_base_url } : {},
   )

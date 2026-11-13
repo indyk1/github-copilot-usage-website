@@ -3,7 +3,10 @@
 
 resource_group_name = "rg-copilot-usage"
 name_prefix         = "copilotusage"
-github_org          = "your-github-org"
+# Give the enterprise slug when the enterprise holds the Copilot billing (the dashboard then shows the whole enterprise),
+# otherwise the organization login. At least one is required; if both are given the enterprise is used.
+github_enterprise   = "your-github-enterprise"
+# github_org        = "your-github-org"
 
 # From the Entra app registration the IT admin created (docs/AUTH.md). Not secrets, but still environment-specific.
 entra_tenant_id = "00000000-0000-0000-0000-000000000000"

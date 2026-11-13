@@ -18,12 +18,27 @@ variable "name_prefix" {
   }
 }
 
-variable "github_org" {
-  description = "Login of the GitHub organization whose Copilot usage is shown."
+variable "github_enterprise" {
+  description = "Slug of the GitHub Enterprise account that holds the Copilot billing. When set, the dashboard shows the whole enterprise (enterprise scope) and github_org is ignored by the app. Leave empty for a self-billed organization."
   type        = string
+  default     = ""
   validation {
-    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9-]{0,38}$", var.github_org))
+    condition     = var.github_enterprise == "" || can(regex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$", var.github_enterprise))
+    error_message = "github_enterprise must be an enterprise slug (letters, digits, hyphens), not a URL."
+  }
+}
+
+variable "github_org" {
+  description = "Login of the GitHub organization whose Copilot usage is shown (organization scope, for a self-billed organization). Optional when github_enterprise is set. At least one of github_org and github_enterprise is required."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.github_org == "" || can(regex("^[A-Za-z0-9][A-Za-z0-9-]{0,38}$", var.github_org))
     error_message = "github_org must be a GitHub organization login (letters, digits and hyphens, at most 39 characters)."
+  }
+  validation {
+    condition     = var.github_org != "" || var.github_enterprise != ""
+    error_message = "At least one of github_org and github_enterprise is required: the enterprise slug when the enterprise holds the Copilot billing, otherwise the organization login."
   }
 }
 

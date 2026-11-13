@@ -44,7 +44,6 @@ stages:
                 - TFSTATE_KEY
                 - TF_RESOURCE_GROUP
                 - TF_NAME_PREFIX
-                - TF_GITHUB_ORG
                 - TF_ENTRA_TENANT_ID
                 - TF_ENTRA_CLIENT_ID
 

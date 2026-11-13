@@ -12,7 +12,6 @@ terraform validate
 args=(
   -var "resource_group_name=${TF_RESOURCE_GROUP}"
   -var "name_prefix=${TF_NAME_PREFIX}"
-  -var "github_org=${TF_GITHUB_ORG}"
   -var "entra_tenant_id=${TF_ENTRA_TENANT_ID}"
   -var "entra_client_id=${TF_ENTRA_CLIENT_ID}"
 )
@@ -20,6 +19,9 @@ add_optional() { # add_optional <terraform variable> <environment variable>
   local value="${!2:-}"
   if [ -n "$value" ]; then args+=(-var "$1=$value"); fi
 }
+# At least one of these two is required; Terraform validates that. The enterprise wins in the app when both are set.
+add_optional github_enterprise            TF_GITHUB_ENTERPRISE
+add_optional github_org                   TF_GITHUB_ORG
 add_optional location                     TF_LOCATION
 add_optional entra_app_id_uri             TF_ENTRA_APP_ID_URI
 add_optional credits_per_seat             TF_CREDITS_PER_SEAT

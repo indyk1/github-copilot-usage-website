@@ -74,8 +74,25 @@ public class InfraSettingsTests
     public void Every_key_the_startup_validator_requires_is_set_by_terraform()
     {
         var tf = Read("infra", "web.tf");
-        foreach (var required in new[] { "AzureAd__TenantId", "AzureAd__ClientId", "Sync__AllowedCallerObjectId", "GitHub__Org", "GitHub__Token", "ConnectionStrings__Default" })
+        foreach (var required in new[] { "AzureAd__TenantId", "AzureAd__ClientId", "Sync__AllowedCallerObjectId", "GitHub__Token", "ConnectionStrings__Default" })
             Assert.Matches($"\"{required}\"\\s*=", tf);
+    }
+
+    [Fact]
+    public void Terraform_sets_both_github_scope_keys_only_when_given_and_requires_one_of_them()
+    {
+        var web = Read("infra", "web.tf");
+        // Each is added only when its variable is non-empty, so an unset one never reaches the app as an empty string.
+        Assert.Matches("var\\.github_org\\s*!=\\s*\"\"\\s*\\?\\s*\\{\\s*\"GitHub__Org\"\\s*=\\s*var\\.github_org\\s*\\}", web);
+        Assert.Matches("var\\.github_enterprise\\s*!=\\s*\"\"\\s*\\?\\s*\\{\\s*\"GitHub__Enterprise\"\\s*=\\s*var\\.github_enterprise\\s*\\}", web);
+        Assert.True(BindsToProperty("GitHub__Enterprise"));
+        Assert.True(BindsToProperty("GitHub__Org"));
+
+        var vars = Read("infra", "variables.tf");
+        Assert.Contains("github_enterprise", vars);
+        Assert.Contains("At least one of github_org and github_enterprise", vars);
+        Assert.Contains("github_enterprise", Read("infra", "terraform.tfvars.example"));
+        Assert.Contains("TF_GITHUB_ENTERPRISE", Read("azure-pipelines", "scripts", "terraform-plan.sh"));
     }
 
     [Fact]

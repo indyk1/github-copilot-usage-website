@@ -143,3 +143,41 @@ run "optional_entra_settings_appear_only_when_set" {
     error_message = "A custom App ID URI and public base URL must reach both apps."
   }
 }
+
+run "enterprise_scope_sets_only_the_enterprise_key_when_the_org_is_empty" {
+  command = plan
+
+  variables {
+    github_org        = ""
+    github_enterprise = "big-corp"
+  }
+
+  assert {
+    condition     = azurerm_linux_web_app.web.app_settings["GitHub__Enterprise"] == "big-corp" && !contains(keys(azurerm_linux_web_app.web.app_settings), "GitHub__Org")
+    error_message = "Enterprise scope must set GitHub__Enterprise and no empty GitHub__Org."
+  }
+}
+
+run "both_set_passes_both_to_the_app" {
+  command = plan
+
+  variables {
+    github_enterprise = "big-corp"
+  }
+
+  assert {
+    condition     = azurerm_linux_web_app.web.app_settings["GitHub__Enterprise"] == "big-corp" && azurerm_linux_web_app.web.app_settings["GitHub__Org"] == "acme"
+    error_message = "When both are given both reach the app (the app lets the enterprise win)."
+  }
+}
+
+run "one_of_org_or_enterprise_is_required" {
+  command = plan
+
+  variables {
+    github_org        = ""
+    github_enterprise = ""
+  }
+
+  expect_failures = [var.github_org]
+}
